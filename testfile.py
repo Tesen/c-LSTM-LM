@@ -77,4 +77,57 @@ def main(args):
     # print("Type dataloader", type(train_data_loader))
     # print("Dataloader", train_data_loader)
     """
-    
+class LogPrint:
+    def __init__(self, file_path, err):
+        self.file = open(file_path, "w", buffering=1)
+        self.err = err
+
+    def lprint(self, text, ret=False, ret2=False):
+        if self.err:
+            if ret == True:
+                if ret2 == True:
+                    sys.stderr.write("\n" + text + "\n")
+                else:
+                    sys.stderr.write("\r" + text + "\n")
+            else:
+                sys.stderr.write("\r" + text)
+        self.file.write(text + "\n")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    """ Data parameter """
+    parser.add_argument("-data", "--data", dest="data", default="./conditional-LSTM-language-model/sample_dataset", type=str, help="alignment data")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./conditional-LSTM-language-model/checkpoint/model", type=str, help="save path")
+
+    """ Feature parameter """
+    parser.add_argument("-window", "--window", dest="window", default=10, type=int, help="window size of melody featrure (default: 10)")
+    parser.add_argument("-word_size", "--word_size", dest="word_size", default=20000, type=int, help="vocab size (default: 20000)")
+
+    """ Model parameter """
+    parser.add_argument("-word_dim", "--word_dim", dest="word_dim", default=512, type=int, help="dimension of Word Embedding (default: 512)")
+    parser.add_argument("-melody_dim", "--melody_dim", dest="melody_dim", default=256, type=int, help="dimension of Melody Layer (default: 256)")
+
+    """ Training parameter """
+    parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="random seed")
+    parser.add_argument("-num_workers", "--num_workers", dest="num_workers", default=4, type=int, help="number of CPU")
+    parser.add_argument("-num_epochs", "--num_epochs", dest="num_epochs", default=5, type=int, help="Epochs")
+    parser.add_argument("-batch_size", "--batch_size", dest="batch_size", default=32, type=int, help="Batch size")
+    parser.add_argument("-lr", "--lr", dest="lr", default=0.001, type=float, help="learning rate")
+    parser.add_argument("-log_interval", "--log_interval", dest="log_interval", default=10, type=int, help="Report interval")
+
+    """ Logging parameter """
+    parser.add_argument("-verbose", "--verbose", dest="verbose", default=1, type=int, help="verbose 0/1")
+    args = parser.parse_args()
+
+    """ Save parameter """
+    if args.verbose == 1:
+        lp = LogPrint(args.checkpoint + ".log", True)
+    else:
+        lp = LogPrint(args.checkpoint + ".log", False)
+    argparse_dict = vars(args)
+    lp.lprint("------ Parameters -----", True)
+    for k, v in argparse_dict.items():
+        lp.lprint("{:>16}:  {}".format(k, v), True)
+    with open(args.checkpoint+".args.json", 'w') as f:
+        f.write(json.dumps(argparse_dict))
+    main(args)
