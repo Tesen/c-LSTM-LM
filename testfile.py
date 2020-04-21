@@ -4,7 +4,7 @@ import json
 import time
 import datetime
 import argparse
-from data import SongLyricDataset#, collate_fn
+from data import SongLyricDataset, collate_fn
 import random
 import numpy as np
 import torch
@@ -52,7 +52,7 @@ def main(args):
                             "window":args.window, 
                             "args_word_size":args.word_size}, ensure_ascii=False))
 
-    """
+    
     # split train/valid 
     n_samples = len(data_set)
     train_size = int(len(data_set) * 0.9)
@@ -76,7 +76,7 @@ def main(args):
 
     # print("Type dataloader", type(train_data_loader))
     # print("Dataloader", train_data_loader)
-    """
+    
 class LogPrint:
     def __init__(self, file_path, err):
         self.file = open(file_path, "w", buffering=1)

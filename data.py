@@ -63,17 +63,12 @@ class SongLyricDataset(data.Dataset):
         for tag in tags:
             features.append('prev_tag=%s'%tag)
 
-        
-        print("Features: ", features)
-        # NOTE: Do I need to add rest and note types to the dataset? In that case, I must augment the dataset even further
-
         # Create index dictionaries for features
         sorted_features = sorted(features)
         self.feature2idx = dict((f, i) for i, f in enumerate(sorted_features))
         self.idx2feature = dict((i, f) for i, f in enumerate(sorted_features))
         self.feature_size = len(self.feature2idx)
 
-        print("feature2idx: ", self.feature2idx)
         """ Load data and create word and syllable vocab """
         # Load data
         files = os.listdir(data)
@@ -88,16 +83,9 @@ class SongLyricDataset(data.Dataset):
             old_word_idx = "<None>"
             # For each word in song lyric increment word occurance dictionary
             for note in notes:
-                # print("word " + str(note[1]) + ": ", note) # Print note for understanding
                 # note = [note_number, word_index, note_type, duration, word, syllable, feature_type]
-                # note[0] = note_number 
-                # note[1] = word_index 
-                # note[2] = note_type(rest) or MIDI_number 
-                # note[3] = duration 
-                # note[4] = word7654q
-                # note[5] = syllable
-                # note[6] = [all syllables] 
-                # note[7]= feature_type
+                # note[0] = note_number, note[1] = word_index, note[2] = note_type(rest) or MIDI_number, note[3] = duration 
+                # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
                 word_idx = note[1]
                 if word_idx != old_word_idx:
                     word_lower = note[5].lower()
@@ -138,7 +126,7 @@ class SongLyricDataset(data.Dataset):
         print("syllable size: ", self.syllable_size)
 
 
-        # Create syllable, lyric and melody embeddings
+        """ Create syllable, lyric and melody embeddings """
         self.idx2lyrics = []
         self.idx2syllable = []
         self.idx2melody = []
@@ -158,7 +146,7 @@ class SongLyricDataset(data.Dataset):
 
             old_word_idx = "<None>"
             
-            # For each word in song lyric increment word occurance dictionary
+            """ For each word in song lyric increment word occurance dictionary """
             
             # NOTE: A feature vectore "feature[]" contains the indexes of the features previous tag (BB,BL or WORD) 
             # Then it also contain the 10 previous note or rest indexes based on position in window as well as the specific rests/notes indexed duration
