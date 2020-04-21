@@ -96,7 +96,7 @@ class LogPrint:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     """ Data parameter """
-    parser.add_argument("-data", "--data", dest="data", default="./conditional-LSTM-language-model/sample_dataset", type=str, help="alignment data")
+    parser.add_argument("-data", "--data", dest="data", default="./conditional-LSTM-language-model/sample_dataset2", type=str, help="alignment data")
     parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./conditional-LSTM-language-model/checkpoint/model", type=str, help="save path")
 
     """ Feature parameter """

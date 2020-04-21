@@ -1,5 +1,5 @@
 ------ Parameters -----
-            data:  ./conditional-LSTM-language-model/sample_dataset
+            data:  ./conditional-LSTM-language-model/sample_dataset2
       checkpoint:  ./conditional-LSTM-language-model/checkpoint/model
           window:  10
        word_size:  20000
@@ -12,8 +12,3 @@
               lr:  0.001
     log_interval:  10
          verbose:  1
------- Data Stats -----
-   song size:  0
-  vocab size:  173
-feature size:  1
-syllable size:  15.0
