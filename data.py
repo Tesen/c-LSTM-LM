@@ -20,7 +20,34 @@ random.seed(0)
 features = []
 note_types = ['note', 'rest']
 tags = ['<WORD>', '<BB>', '<BL>']
-lengths = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 16, 32]
+lengths = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 16.0, 32.0]
+
+def get_correct_length(length):
+    length = int(length)
+    if length <= 0.25:
+        return 0.25
+    elif length <= 0.5:
+        return 0.5
+    elif length <= 0.75:
+        return 0.75
+    elif length <= 1:
+        return 1.0
+    elif length <= 1.5:
+        return 1.5
+    elif length <= 2:
+        return 2.0
+    elif length <= 3:
+        return 3.0
+    elif length <= 4:
+        return 4.0
+    elif length <= 6:
+        return 6.0
+    elif length <= 8:
+        return 8.0
+    elif length <= 16:
+        return 16.0
+    elif length <= 32:
+        return 32.0
 
 class SongLyricDataset(data.Dataset):
     def __init__(self, data, word_size, window):
@@ -37,7 +64,7 @@ class SongLyricDataset(data.Dataset):
             features.append('prev_tag=%s'%tag)
 
         
-        print(features)
+        print("Features: ", features)
         # NOTE: Do I need to add rest and note types to the dataset? In that case, I must augment the dataset even further
 
         # Create index dictionaries for features
@@ -46,14 +73,14 @@ class SongLyricDataset(data.Dataset):
         self.idx2feature = dict((i, f) for i, f in enumerate(sorted_features))
         self.feature_size = len(self.feature2idx)
 
-        print(self.feature2idx)
+        print("feature2idx: ", self.feature2idx)
         """ Load data and create word and syllable vocab """
         # Load data
         files = os.listdir(data)
 
         # Initialize word occurance dictionary
         word_dict = defaultdict(int)
-        syll_dict = defaultdict(int)
+        syll_dict = defaultdict(int) 
 
         # For each song
         for file in files:
@@ -61,23 +88,21 @@ class SongLyricDataset(data.Dataset):
             old_word_idx = "<None>"
             # For each word in song lyric increment word occurance dictionary
             for note in notes:
-                print("word " + str(note[1]) + ": ", note) # Print note for understanding
-                # note = [note_number, word_number, note_type, duration, word, syllable, feature_type]
+                # print("word " + str(note[1]) + ": ", note) # Print note for understanding
+                # note = [note_number, word_index, note_type, duration, word, syllable, feature_type]
                 # note[0] = note_number 
-                # note[1] = word_number 
+                # note[1] = word_index 
                 # note[2] = note_type(rest) or MIDI_number 
-                # note[4] = duration 
-                # note[5] = word 
-                
-                # note[6] = syllable
-                # note[7] = [all syllables] 
-                # note[8]= feature_type
+                # note[3] = duration 
+                # note[4] = word7654q
+                # note[5] = syllable
+                # note[6] = [all syllables] 
+                # note[7]= feature_type
                 word_idx = note[1]
                 if word_idx != old_word_idx:
                     word_lower = note[5].lower()
                     word_dict[word_lower] += 1
-                    syll_dict[word_lower] += len(note[7])
-                    print("number of syllalbes = %s"%len(note[7]))
+                    syll_dict[word_lower] += len(note[6])
 
 
         # Create index dictionaries for words
@@ -98,7 +123,7 @@ class SongLyricDataset(data.Dataset):
         # Create word index embedding dictionaries
         print("Number of unique words: %s" %len(word_dict.items()))
         for word, freq in sorted(word_dict.items(), key=lambda x:x[1], reverse=True)[:word_size:]: # Sort word_dict after frequency and limit size to word_size (size of our dictionary)
-            # Add number of syllables for each word
+            # Add number of syllables for each word, calculate average number of syllables per word and average
             syllables.add(np.round(syll_dict[word]/freq))
 
             # Build word/index dictionaries
@@ -121,7 +146,6 @@ class SongLyricDataset(data.Dataset):
         # For each song
         for file in files:
             notes = np.load(os.path.join(data, file), allow_pickle=True)
-            print(notes)
 
             # Define starting state
             old_word_idx = "<None>"
@@ -131,6 +155,8 @@ class SongLyricDataset(data.Dataset):
             syllables = []
             lyrics = []
             melody = []
+
+            old_word_idx = "<None>"
             
             # For each word in song lyric increment word occurance dictionary
             
@@ -142,53 +168,145 @@ class SongLyricDataset(data.Dataset):
             #                                note[-1]=note, note_dur, note[0]= note,note_dur, note[1]=rest, rest_dur, note[2] = note, note_dur, note[3]=note, note_dur, ...]
             # which in this case would be something like: [280, 240, 108, ...]
 
+            for i, note in enumerate(notes):
+                feauture_type = note[7]
+
+                word_idx = note[1]
+                if word_idx != old_word_idx:
+                    # This defines and lists the window for previous and upcoming notes
+                    prev_i = i - window + 1
+                    if prev_i < 0: 
+                        prev_i = 0
+                    prev_notes = notes[prev_i:i]
+
+                    next_i = i + window
+                    if next_i > len(notes):
+                        next_i = len(notes)
+                    next_notes = notes[i:next_i]
+
+                    # If feature type is BB
+                    if feauture_type == "<BB>":
+                        feature = [] # Initiatie the feature vector which is to contain the 
+
+                        w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
+                        lyrics.append(w_idx) # Append lyric array with feature
+                        syllables.append(1) # Append syllable array with 1
+
+                        prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                        feature.append(prev_tag)
+
+                        # For previous 8 notes in window
+                        for j, prev_note in enumerate(prev_notes):
+                            if prev_note[2] == 'rest':
+                                note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
+                            else:
+                                note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
+                            
+                            note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
+                            
+                            feature.append(note_num)
+                            feature.append(note_duration)
 
 
-            for i, word in enumerate(song_features[2]):
-                feauture_type = song_features[4][0][i][0]
-                print("feature type: ", feauture_type)
-                # This defines and lists the window for previous and upcoming notes
-                prev_i = i - window + 1
-                if prev_i < 0: 
-                    prev_i = 0
+                        # For upcoming 8 notes in the window
+                        for j, next_note in enumerate(next_notes):
+                            if next_note[2] == 'rest':
+                                note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
+                            else:
+                                note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
 
-                next_i = i + window
-                if next_i > len(song_features[0]):
-                    next_i = len(song_features[0])
+                            note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
 
-                # If feature type is BB
-                if feauture_type == "<BB>":
-                    feature = [] # Initiatie the feature vector which is to contain the 
+                            feature.append(note_num)
+                            feature.append(note_duration)
 
-                    w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
-                    lyrics.append(w_idx)
-                    syllables.append(1)
+                        # Pad feature vector (add elements to fill the array)
+                        feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+
+                        # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
+                        melody.append(feature[::])
+                        tag_stack.append("<BB>")
+
+                    if feauture_type == "<BL>":
+                        feature = [] # Initiatie the feature vector which is to contain the 
+
+                        w_idx = self.word2idx.get("<BL>|<null>") # Get word index of BB feature
+                        lyrics.append(w_idx) # Append lyric array with feature
+                        syllables.append(1) # Append syllable array with 1
+
+                        prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                        feature.append(prev_tag)
+
+                        # For previous 8 notes in window
+                        for j, prev_note in enumerate(prev_notes):
+                            if prev_note[2] == 'rest':
+                                note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
+                            else:
+                                note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
+                            
+                            note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
+                            
+                            feature.append(note_num)
+                            feature.append(note_duration)
+
+
+                        # For upcoming 8 notes in the window
+                        for j, next_note in enumerate(next_notes):
+                            if next_note[2] == 'rest':
+                                note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
+                            else:
+                                note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
+
+                            note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
+
+                            feature.append(note_num)
+                            feature.append(note_duration)
+
+                        # Pad feature vector (add elements to fill the array)
+                        feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+
+                        # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
+                        melody.append(feature[::])
+                        tag_stack.append("<BL>")                        
+
+                    feature = []
+                    w_idx = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                    lyrics.append(w_idx) # Append lyric array with feature index
+                    syllables.append(len(note[6])) # Append sylable array with number of features
 
                     prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
                     feature.append(prev_tag)
 
-                    
-                    for j, jj in enumerate(range(prev_i, i)): # j = [0:8], jj = [start_of_window_note:end_of_window_note]
-                        rest_num = song_features[1][jj][0][2]
-                        note_num = song_features[1][jj][1]
-
-                        # print("i = %s, j = %s, jj = %s, prev_i = %s, i-prev_i-j = %s"%(i, j, jj, prev_i, i-prev_i-j))
-                        if rest_num > 0:
-                            note_num = self.feature2idx["note[-%s]=rest"%(i-prev_i-j)]
-                            note_duration = self.feature2idx["length[-%s]=%s",(i-prev_i-j, rest_num)]
+                    # For previous 8 notes in window
+                    for j, prev_note in enumerate(prev_notes):
+                        if prev_note[2] == 'rest':
+                            note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
                         else:
-                            note_num = self.feature2idx["note[-%s]=note"%(i-prev_i-j)]
+                            note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
                         
+                        note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
+                        
+                        feature.append(note_num)
+                        feature.append(note_duration)
 
-                              
+                    # For upcoming 8 notes in the window
+                    for j, next_note in enumerate(next_notes):
+                        if next_note[2] == 'rest':
+                            note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
+                        else:
+                            note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
 
+                        note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
 
-                    tag_stack.append("<BB>")
+                        feature.append(note_num)
+                        feature.append(note_duration)
 
-                    # for j in range(prev_i, i+1):
-                        # print("hej")
-
-
+                    # Pad feature vector (add elements to fill the array)
+                    feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+                    tag_stack.append("<WORD>")
+            
+            print("feature: ", feature)
+            old_word_idx = word_idx
 
 
         self.feature_size = 1

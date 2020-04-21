@@ -12,3 +12,8 @@
               lr:  0.001
     log_interval:  10
          verbose:  1
+------ Data Stats -----
+   song size:  0
+  vocab size:  266
+feature size:  1
+syllable size:  14.0
