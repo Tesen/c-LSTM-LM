@@ -270,7 +270,7 @@ class SongLyricDataset(data.Dataset):
                         tag_stack.append("<BL>")                        
 
                     feature = []
-                    w_idx = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                    w_idx = self.word2idx.get(note[4], self.word2idx["<unk>"])
                     lyrics.append(w_idx) # Append lyric array with feature index
                     syllables.append(len(note[6])) # Append sylable array with number of features
 
@@ -303,26 +303,46 @@ class SongLyricDataset(data.Dataset):
 
                     # Pad feature vector (add elements to fill the array)
                     feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+                    melody.append(feature[::])
                     tag_stack.append("<WORD>")
-            
-            print("feature: ", feature)
+
             old_word_idx = word_idx
-
-
-        self.feature_size = 1
-        
-
-
-
-
-
-
-
+            
+            # Append syllable, lyric and melody object array with arrays
+            self.idx2syllable.append(syllables[::])
+            self.idx2lyrics.append(lyrics[::])
+            self.idx2melody.append(lyrics[::])
 
     def __len__(self):
         return len(self.idx2lyrics)
 
     def __getitem__(self, idx):
-        sample = 0
-        return sample
+        syllables = torch.Tensor(self.idx2syllable[idx])
+        lyrics = torch.Tensor(self.idx2lyrics[idx])
+        melody = self.idx2melody[idx]
+
+        return syllables, lyrics, melody. self.feature_size
+
+
+def collate_fn(data):
+    data.sort(key=lambda x: len(x[1]), reverse=True)
+    _syllables, _lyrics, _melody, feature_size = zip(*data)
+    
+    lengths = [len(_lyric) for _lyric in _lyrics] # Creates an array of the lengths of each songs lyrics
+    max_length = lengths[0]
+    
+    lyrics = torch.zeros(len(_lyrics), max_length).long() # Initialise tensors
+    syllables = torch.zeros(len(_syllables), max_length).long() # Initialise tensors
+    melody = torch.zeros(len(_melody), max_length, feature_size[0]).long() # Initialise tensors
+
+    for i, _lyric in enumerate(_lyrics):
+        end = lengths[i]
+        lyrics[i, :end] = _lyric[:end] # Create one long tensor for all songs
+        syllables[i, :end] = _syllables[i][:end] # Create one long tensor for all songs
+        melody[i, :end].scatter_(1, torch.Tensor(_melody[i]).long(), 1)
+
+    lengths = torch.Tensor(lengths).long()
+
+    return syllables, lyrics, melody, lengths
+
 
