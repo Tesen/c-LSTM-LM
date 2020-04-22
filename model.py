@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 from torch import nn as nn
-from torc.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 
 class CLMM(nn.Module):
@@ -19,8 +19,8 @@ class CLMM(nn.Module):
         self.rnn = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, num_layers=1, bias=True, batch_first=True, bidirectional=False)
 
         """ Output """
-        self.fc_lyrics_out = nn.Linear(self.hidden_dim, word_size) # Fully connected layer
-        self.fc_syllables_out = nn.Linear(self.hidden_dim, syllable_size) # Fully connected layer
+        self.fc_lyrics_out = nn.Linear((self.hidden_dim), word_size) # Fully connected layer
+        self.fc_syllables_out = nn.Linear(self.hidden_dim, int(syllable_size)) # Fully connected layer
         
         """ Util """
         self.relu = nn.ReLU(True)

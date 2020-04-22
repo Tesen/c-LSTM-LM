@@ -7,8 +7,10 @@ import random
 import numpy as np
 from utils import load_settings
 from data import SongLyricDataset, collate_fn
+from model import CLMM
 import torch
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class LogPrint:
     def __init__(self, file_path, err):
@@ -25,8 +27,6 @@ class LogPrint:
             else:
                 sys.stderr.write("\r" + text)
         self.file.write(text + "\n")
-
-
 
 
 def main():
@@ -48,13 +48,56 @@ def main():
     lp.lprint("{:>12}:  {}".format("feature size", data_feature_size), True)
     lp.lprint("{:>12}:  {}".format("syllable size", data_syllable_size), True)
 
+    """ Save vocab arrays and models to checkpoint """
+    with open(checkpoint + '.feature.json', 'w') as f:
+        f.write(json.dumps(data_set.idx2feature))
+
+    with open(checkpoint + '.vocab.json', 'w') as f:
+        f.write(json.dumps(data_set.idx2word))
+
+    with open(checkpoint + '.param.json', 'w') as f:
+        f.write(json.dumps({"feature_idx_path": checkpoint+'.feature.json',
+                            "vocab_idx_path": checkpoint+'.vocab.json',
+                            "word_dim": word_dim,
+                            "syllable_size": data_syllable_size,
+                            "melody_dim": melody_dim,
+                            "feature_size": data_feature_size,
+                            "window": window,
+                            "args_word_size": word_size}))
     
 
+    """ Split data into training and validation data """
+    n_samples = len(data_set)
+    train_size = int(n_samples*train_rate)
+    validation_size = int((n_samples - train_size)/2)
+    test_size = validation_size
+    
+    train_data_set, val_data_set, test_data_set = torch.utils.data.random_split(data_set, [train_size, validation_size, test_size])
 
+    print("Training set: ", len(train_data_set), " songs, Validation set: ", len(val_data_set), " songs, "
+          "Test set: ", len(test_data_set), " songs.")
 
+    """ Create PyTorch dataloaders """
+    train_data_loader = torch.utils.data.DataLoader(dataset=train_data_set,
+                                                    batch_size=batch_size,
+                                                    shuffle=True,
+                                                    num_workers=num_workers,
+                                                    collate_fn=collate_fn)
 
+    val_data_loader = torch.utils.data.DataLoader(dataset=val_data_set,
+                                                  batch_size=batch_size,
+                                                  shuffle=True,
+                                                  num_workers=num_workers, 
+                                                  collate_fn=collate_fn)
 
+    test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
+                                                  batch_size=batch_size,
+                                                  shuffle=True,
+                                                  num_workers=num_workers, 
+                                                  collate_fn=collate_fn)
 
+    """ Load CLLM model """
+    model = CLMM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size).to(device)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a conditional-LSTM language model to generate lyrics given melody")
@@ -63,7 +106,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     settings = vars(args)
-    print("HELLO?")
     settings = load_settings(settings)
     
     print(settings["checkpoint"])

@@ -8,13 +8,15 @@
         word_dim:  512
       melody_dim:  256
             seed:  0
-     num_workser:  4
+     num_workers:  4
       num_epochs:  5
       batch_size:  32
               lr:  0.001
     log_interval:  10
+      train_rate:  0.8
+        val_rate:  0.1
 ------ Data Stats -----
-   song size:  5
-  vocab size:  266
+Number of songs:  10
+  vocab size:  492
 feature size:  283
-syllable size:  14.0
+syllable size:  14

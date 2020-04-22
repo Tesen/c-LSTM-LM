@@ -120,10 +120,10 @@ class SongLyricDataset(data.Dataset):
             idx += 1
 
         self.word_size = len(self.word2idx)
-        self.syllable_size = max(syllables) + 10
+        self.syllable_size = int(max(syllables) + 10)
 
-        print("word size: ", self.word_size)
-        print("syllable size: ", self.syllable_size)
+        # print("word size: ", self.word_size)
+        # print("syllable size: ", self.syllable_size)
 
 
         """ Create syllable, lyric and melody embeddings """
