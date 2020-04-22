@@ -4,13 +4,15 @@ import sys
 import argparse
 import json
 import random
+import  time
 import numpy as np
 from utils import load_settings
 from data import SongLyricDataset, collate_fn
 from model import CLMM
 import torch
+import torch.nn as nn
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class LogPrint:
     def __init__(self, file_path, err):
@@ -27,6 +29,30 @@ class LogPrint:
             else:
                 sys.stderr.write("\r" + text)
         self.file.write(text + "\n")
+
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
+
+    def rest(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+    
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val*n
+        self.count += n
+        self.avg = self.sum/self.count
+
+def repackage_hidden(h):
+    """Wraps hidden states in new Tensors, to detach them from their history."""
+
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    else:
+        return tuple(repackage_hidden(v) for v in h)
 
 
 def main():
@@ -90,14 +116,77 @@ def main():
                                                   num_workers=num_workers, 
                                                   collate_fn=collate_fn)
 
-    test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
-                                                  batch_size=batch_size,
-                                                  shuffle=True,
-                                                  num_workers=num_workers, 
-                                                  collate_fn=collate_fn)
+    # test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
+    #                                               batch_size=batch_size,
+    #                                               shuffle=True,
+    #                                               num_workers=num_workers, 
+    #                                               collate_fn=collate_fn)
 
     """ Load CLLM model """
-    model = CLMM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size).to(device)
+    model = CLMM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size)#.to(device)
+
+    """ Build Optimizers """
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
+    loss_criterion = nn.CrossEntropyLoss() # Combines LogSoftmax() and NLLLoss() (Negative log likelihood loss)
+
+    """ Define traingin function """
+    def train(epoch, data_set, data_loader):
+        model.train() # Activate train mode
+
+        # Log time
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        sum_losses_s = AverageMeter()
+        sum_losses_l = AverageMeter()
+        t_start = time.time()
+
+        """ Batches """
+        hidden = model.init_hidden(batch_size) # Creates a list of 3D layers with 1 x batch_size x hidden_dim
+
+        for i, (syllable, lyric, melody, lengths) in enumerate(data_loader):
+            # Take time
+            data_time.update(time.time() - t_start)
+
+            """ Move dataloaders to GPU """
+            # syllable = syllable.to(device)
+            # lyric = lyric.to(device)
+            # melody = melody.to(device).float()
+            # lengths = lengths.to(device)
+
+            """ Reset gradient to zero """
+            optimizer.zero_grad()
+
+            """ Detach hidden layers """
+            hidden = repackage_hidden(hidden)
+
+            
+
+    def validation(epoch, data_set, data_loader):
+        model.val()
+    
+    def test(data_set, data_loader):
+        print("test")
+
+    def save_model(epoch):
+        return ""
+
+    """ Run Epochs """
+    lp.lprint("------ Training -----", True)
+    for epoch in range(num_epochs):
+        # Training 
+        train(epoch, train_data_set, train_data_loader)
+        lp.lprint("", True)
+
+        # Validation
+        with torch.no_grad():
+            validation(epoch, val_data_set, val_data_loader)
+            lp.lprint("", True)
+
+            # Save checkpoint
+            save_model(epoch)
+        lp.lprint("-----------", True)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a conditional-LSTM language model to generate lyrics given melody")
@@ -126,4 +215,18 @@ if __name__ == "__main__":
     
     # Update local variables
     locals().update(settings)
+    # Redefine variables to avoid annoying text editor errors
+    lr = lr
+    batch_size = batch_size
+    checkpoint = checkpoint
+    word_size = word_size
+    word_dim = word_dim
+    melody_dim = melody_dim
+    num_workers = num_workers
+    seed = seed
+    window = window
+    train_rate = train_rate
+    data = data
+    num_epochs = num_epochs
+
     main()
