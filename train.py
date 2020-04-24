@@ -6,46 +6,20 @@ import json
 import random
 import  time
 import numpy as np
-from utils import load_settings
+import utils
 from data import SongLyricDataset, collate_fn
 from model import CLMM
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.utils.data as data
+from torch.nn.utils.rnn import pack_padded_sequence
+from collections import defaultdict
 
-# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-class LogPrint:
-    def __init__(self, file_path, err):
-        self.file = open(file_path, "w", buffering=1)
-        self.err = err
-
-    def lprint(self, text, ret=False, ret2=False):
-        if self.err:
-            if ret == True:
-                if ret2 == True:
-                    sys.stderr.write("\n" + text + "\n")
-                else:
-                    sys.stderr.write("\r" + text + "\n")
-            else:
-                sys.stderr.write("\r" + text)
-        self.file.write(text + "\n")
-
-class AverageMeter(object):
-    def __init__(self):
-        self.reset()
-
-    def rest(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-    
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val*n
-        self.count += n
-        self.avg = self.sum/self.count
-
+# Function from PyTorch NLP official example
 def repackage_hidden(h):
     """Wraps hidden states in new Tensors, to detach them from their history."""
 
@@ -134,46 +108,159 @@ def main():
         model.train() # Activate train mode
 
         # Log time
-        batch_time = AverageMeter()
-        data_time = AverageMeter()
-        sum_losses_s = AverageMeter()
-        sum_losses_l = AverageMeter()
-        t_start = time.time()
+        batch_time = utils.AverageMeter()
+        data_time = utils.AverageMeter()
+        sum_losses_syll = utils.AverageMeter()
+        sum_losses_lyric = utils.AverageMeter()
+        start_time = time.time()
 
         """ Batches """
         hidden = model.init_hidden(batch_size) # Creates a list of 3D layers with 1 x batch_size x hidden_dim
 
+        # print("DATA LOADER: ", data_loader)
         for i, (syllable, lyric, melody, lengths) in enumerate(data_loader):
             # Take time
-            data_time.update(time.time() - t_start)
+            elapsed = time.time()
+            data_time.update((elapsed - start_time)*1000)
 
             """ Move dataloaders to GPU """
-            # syllable = syllable.to(device)
-            # lyric = lyric.to(device)
-            # melody = melody.to(device).float()
-            # lengths = lengths.to(device)
+            # print("TO DEVICE")
+            syllable = syllable.to(device)
+            lyric = lyric.to(device)
+            melody = melody.to(device).float()
+            lengths = lengths.to(device)
+
+            """ Remove first melody feature """
+            melody = melody[:, 1:] # We dont really want to do this?
+            # print("melody[:, 1] = %s"%melody[:, 1])
 
             """ Reset gradient to zero """
             optimizer.zero_grad()
 
             """ Detach hidden layers """
-            hidden = repackage_hidden(hidden)
+            hidden = repackage_hidden(hidden) # Function from PyTorch NLP official example
 
+            """ Feedforward """
+            # Feedforward
+            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths)
             
+            # Define packed padded targets
+            target_syllable = pack_padded_sequence(syllable[:, 1:], lengths-1, batch_first=True)[0]
+            target_lyrics = pack_padded_sequence(lyric[:, 1:], lengths-1, batch_first=True)[0]
+            
+            # Calculate and update Cross-Entropy loss
+            loss_syllable = loss_criterion(syllable_output, target_syllable)
+            sum_losses_syll.update(loss_syllable)
+
+            loss_lyrics = loss_criterion(lyrics_output, target_lyrics)
+            sum_losses_lyric.update(loss_lyrics)
+
+            """ Backpropagation """
+            loss = loss_syllable + loss_lyrics
+            loss.backward()
+            optimizer.step()
+
+            """ Time """
+            elapsed = time.time()
+            batch_time.update((elapsed - start_time))
+
+            """ Print progress """
+            if i % log_interval == 0:
+                lp.lprint('| Training Epoch: {:3d}/{:3d}  {:6d}/{:6d} '
+                          '| lr:{:6.5f} '
+                          '| {batch_time.avg:7.2f} s/batch '
+                          '| {data_time.avg:5.2f} ms/data_load '
+                          '| Loss(Syllable) {loss_s.avg:5.5f} '
+                          '| Loss(Lyrics) {loss_l.avg:5.5f} |'
+                          .format(epoch+1, num_epochs, i, len(data_loader), lr, 
+                                  batch_time=batch_time,
+                                  data_time=data_time, 
+                                  loss_s=sum_losses_syll, 
+                                  loss_l=sum_losses_lyric))
+
 
     def validation(epoch, data_set, data_loader):
-        model.val()
-    
+        model.eval()
+
+        # Log time
+        batch_time = utils.AverageMeter()
+        data_time = utils.AverageMeter()
+        sum_losses_syll = utils.AverageMeter()
+        sum_losses_lyric = utils.AverageMeter()
+        start_time = time.time()
+
+        """ Batches """
+        hidden = model.init_hidden(batch_size) # Creates a list of 3D layers with 1 x batch_size x hidden_dim
+
+        # print("DATA LOADER: ", data_loader)
+        for i, (syllable, lyric, melody, lengths) in enumerate(data_loader):
+            # Take time
+            elapsed = time.time()
+            data_time.update((elapsed - start_time)*1000)
+
+            """ Move dataloaders to GPU """
+            syllable = syllable.to(device)
+            lyric = lyric.to(device)
+            melody = melody.to(device).float()
+            lengths = lengths.to(device)
+
+            """ Remove first melody feature """
+            melody = melody[:, 1:] # We dont really want to do this?
+
+            """ Reset gradient to zero """
+            optimizer.zero_grad()
+
+            """ Detach hidden layers """
+            hidden = repackage_hidden(hidden) # Function from PyTorch NLP official example
+
+            """ Feedforward """
+            # Feedforward
+            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths)
+            
+            # Define packed padded targets
+            target_syllable = pack_padded_sequence(syllable[:, 1:], lengths-1, batch_first=True)[0]
+            target_lyrics = pack_padded_sequence(lyric[:, 1:], lengths-1, batch_first=True)[0]
+            
+            # Calculate and update Cross-Entropy loss
+            loss_syllable = loss_criterion(syllable_output, target_syllable)
+            sum_losses_syll.update(loss_syllable)
+
+            loss_lyrics = loss_criterion(lyrics_output, target_lyrics)
+            sum_losses_lyric.update(loss_lyrics)
+
+            """ Time """
+            elapsed = time.time()
+            batch_time.update((elapsed - start_time))
+
+            """ Print progress """
+            if i % log_interval == 0:
+                lp.lprint('| Validation Epoch: {:3d}/{:3d}  {:6d}/{:6d} '
+                          '| lr:{:6.5f} '
+                          '| {batch_time.avg:7.2f} s/batch '
+                          '| {data_time.avg:5.2f} ms/data_load '
+                          '| Loss(Syllable) {loss_s.avg:5.5f} '
+                          '| Loss(Lyrics) {loss_l.avg:5.5f} |'
+                          .format(epoch+1, num_epochs, i, len(data_loader), lr, 
+                                  batch_time=batch_time,
+                                  data_time=data_time, 
+                                  loss_s=sum_losses_syll, 
+                                  loss_l=sum_losses_lyric))
+
+
     def test(data_set, data_loader):
         print("test")
 
     def save_model(epoch):
-        return ""
+        model.eval()
+        with open(checkpoint+"_%02d.pt"%(epoch+1), 'wb') as f:
+            torch.save(model.state_dict(), f)
 
     """ Run Epochs """
     lp.lprint("------ Training -----", True)
+    first_start_time = time.time()
     for epoch in range(num_epochs):
         # Training 
+        # print("TRAAAAAAINING")
         train(epoch, train_data_set, train_data_loader)
         lp.lprint("", True)
 
@@ -184,8 +271,11 @@ def main():
 
             # Save checkpoint
             save_model(epoch)
+    
         lp.lprint("-----------", True)
-
+    elapsed = time.time() - first_start_time
+    lp.lprint('Total elapsed time: {elapsed:7.2f}/60 minutes'.format(elapsed=elapsed))
+    
 
 
 if __name__ == "__main__":
@@ -195,14 +285,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     settings = vars(args)
-    settings = load_settings(settings)
+    settings = utils.load_settings(settings)
     
     print(settings["checkpoint"])
 
     if args.verbose == 1:
-        lp = LogPrint(settings['checkpoint'] + '.log', True)
+        lp = utils.LogPrint(settings['checkpoint'] + '.log', True)
     else:
-        lp = LogPrint(settings['checkpoint'] + '.log', False)
+        lp = utils.LogPrint(settings['checkpoint'] + '.log', False)
 
     # Print settings
     lp.lprint("------ Parameters -----", True)
@@ -228,5 +318,7 @@ if __name__ == "__main__":
     train_rate = train_rate
     data = data
     num_epochs = num_epochs
+    log_interval = log_interval
+
 
     main()

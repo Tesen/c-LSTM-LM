@@ -15,8 +15,36 @@
     log_interval:  10
       train_rate:  0.8
         val_rate:  0.1
+       test_rate:  0.1
 ------ Data Stats -----
 Number of songs:  10
   vocab size:  492
 feature size:  283
 syllable size:  14
+------ Training -----
+| Training Epoch:   1/  5       0/     1 | lr:0.00100 |   11.29 s/batch | 46.51 ms/data_load | Loss(Syllable) 3.08980 | Loss(Lyrics) 6.47790 |
+
+| Validation Epoch:   1/  5       0/     1 | lr:0.00100 |    0.25 s/batch | 33.96 ms/data_load | Loss(Syllable) 2.81796 | Loss(Lyrics) 5.85619 |
+
+-----------
+| Training Epoch:   2/  5       0/     1 | lr:0.00100 |   11.23 s/batch | 55.14 ms/data_load | Loss(Syllable) 2.78376 | Loss(Lyrics) 5.76360 |
+
+| Validation Epoch:   2/  5       0/     1 | lr:0.00100 |    0.28 s/batch | 35.46 ms/data_load | Loss(Syllable) 2.79591 | Loss(Lyrics) 5.72049 |
+
+-----------
+| Training Epoch:   3/  5       0/     1 | lr:0.00100 |   11.47 s/batch | 60.77 ms/data_load | Loss(Syllable) 2.67915 | Loss(Lyrics) 5.33792 |
+
+| Validation Epoch:   3/  5       0/     1 | lr:0.00100 |    0.26 s/batch | 35.14 ms/data_load | Loss(Syllable) 2.72104 | Loss(Lyrics) 5.63765 |
+
+-----------
+| Training Epoch:   4/  5       0/     1 | lr:0.00100 |   11.24 s/batch | 57.73 ms/data_load | Loss(Syllable) 2.51461 | Loss(Lyrics) 5.02007 |
+
+| Validation Epoch:   4/  5       0/     1 | lr:0.00100 |    0.26 s/batch | 33.92 ms/data_load | Loss(Syllable) 2.63004 | Loss(Lyrics) 5.55989 |
+
+-----------
+| Training Epoch:   5/  5       0/     1 | lr:0.00100 |   11.45 s/batch | 64.57 ms/data_load | Loss(Syllable) 2.47841 | Loss(Lyrics) 4.81729 |
+
+| Validation Epoch:   5/  5       0/     1 | lr:0.00100 |    0.26 s/batch | 36.76 ms/data_load | Loss(Syllable) 2.56136 | Loss(Lyrics) 5.51267 |
+
+-----------
+Total elapsed time:   58.53

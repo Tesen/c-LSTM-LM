@@ -12,5 +12,6 @@
     "lr": 0.001,
     "log_interval": 10,
     "train_rate": 0.8,
-    "val_rate": 0.1
+    "val_rate": 0.1,
+    "test_rate": 0.1
 }

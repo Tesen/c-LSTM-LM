@@ -75,7 +75,10 @@ class SongLyricDataset(data.Dataset):
 
         # Initialize word occurance dictionary
         word_dict = defaultdict(int)
-        syll_dict = defaultdict(int) 
+        syll_dict = defaultdict(int)
+        
+        # Limit number of songs for testing
+        # files = files[0:4] 
 
         # For each song
         for file in files:
@@ -297,9 +300,12 @@ class SongLyricDataset(data.Dataset):
             old_word_idx = word_idx
             
             # Append syllable, lyric and melody object array with arrays
-            self.idx2syllable.append(syllables[::])
+            self.idx2syllable.append(syllables[::]) 
+            # print("idx2sylldable: ",self.idx2syllable)
             self.idx2lyrics.append(lyrics[::])
-            self.idx2melody.append(lyrics[::])
+            # print("idx2lyrics: ", self.idx2lyrics)  
+            self.idx2melody.append(melody[::])
+            # print("idx2melody: ", self.idx2melody)
 
     def __len__(self):
         return len(self.idx2lyrics)
@@ -309,13 +315,16 @@ class SongLyricDataset(data.Dataset):
         lyrics = torch.Tensor(self.idx2lyrics[idx])
         melody = self.idx2melody[idx]
 
-        return syllables, lyrics, melody. self.feature_size
+        return syllables, lyrics, melody, self.feature_size
 
 
 def collate_fn(data):
     data.sort(key=lambda x: len(x[1]), reverse=True)
+    # print("len(data) = %s"%len(data))
     _syllables, _lyrics, _melody, feature_size = zip(*data)
-    
+
+    # print("len(_melody) = %s"%len(_melody))
+
     lengths = [len(_lyric) for _lyric in _lyrics] # Creates an array of the lengths of each songs lyrics
     max_length = lengths[0]
     
@@ -327,7 +336,10 @@ def collate_fn(data):
         end = lengths[i]
         lyrics[i, :end] = _lyric[:end] # Create one long tensor for all songs
         syllables[i, :end] = _syllables[i][:end] # Create one long tensor for all songs
-        melody[i, :end].scatter_(1, torch.Tensor(_melody[i]).long(), 1)
+        # print("_MELODY[i]: ", _melody[i])
+        # print("len(_MELODY[i]: ", len(_melody[i]))
+        # print("Tensor size: ", torch.Tensor(_melody[i]).long().size())
+        melody[i, :end].scatter_(1, torch.Tensor(_melody[i]).long(), 1) 
 
     lengths = torch.Tensor(lengths).long()
 
