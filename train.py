@@ -7,8 +7,9 @@ import random
 import  time
 import numpy as np
 import utils
+import matplotlib.pyplot as plt
 from data import SongLyricDataset, collate_fn
-from model import CLMM
+from model import CLLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,16 +19,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from collections import defaultdict
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-# Function from PyTorch NLP official example
-def repackage_hidden(h):
-    """Wraps hidden states in new Tensors, to detach them from their history."""
-
-    if isinstance(h, torch.Tensor):
-        return h.detach()
-    else:
-        return tuple(repackage_hidden(v) for v in h)
-
+print("Device type: %s"%device)
 
 def main():
     """ Set seeds """
@@ -97,7 +89,7 @@ def main():
     #                                               collate_fn=collate_fn)
 
     """ Load CLLM model """
-    model = CLMM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size)#.to(device)
+    model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size, num_layers=num_layers).to(device)
 
     """ Build Optimizers """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
@@ -117,14 +109,12 @@ def main():
         """ Batches """
         hidden = model.init_hidden(batch_size) # Creates a list of 3D layers with 1 x batch_size x hidden_dim
 
-        # print("DATA LOADER: ", data_loader)
         for i, (syllable, lyric, melody, lengths) in enumerate(data_loader):
             # Take time
             elapsed = time.time()
             data_time.update((elapsed - start_time)*1000)
 
             """ Move dataloaders to GPU """
-            # print("TO DEVICE")
             syllable = syllable.to(device)
             lyric = lyric.to(device)
             melody = melody.to(device).float()
@@ -132,13 +122,12 @@ def main():
 
             """ Remove first melody feature """
             melody = melody[:, 1:] # We dont really want to do this?
-            # print("melody[:, 1] = %s"%melody[:, 1])
 
             """ Reset gradient to zero """
             optimizer.zero_grad()
 
             """ Detach hidden layers """
-            hidden = repackage_hidden(hidden) # Function from PyTorch NLP official example
+            hidden = utils.repackage_hidden(hidden) # Function from PyTorch NLP official example
 
             """ Feedforward """
             # Feedforward
@@ -177,6 +166,7 @@ def main():
                                   data_time=data_time, 
                                   loss_s=sum_losses_syll, 
                                   loss_l=sum_losses_lyric))
+        return sum_losses_lyric.avg, sum_losses_syll.avg
 
 
     def validation(epoch, data_set, data_loader):
@@ -192,7 +182,6 @@ def main():
         """ Batches """
         hidden = model.init_hidden(batch_size) # Creates a list of 3D layers with 1 x batch_size x hidden_dim
 
-        # print("DATA LOADER: ", data_loader)
         for i, (syllable, lyric, melody, lengths) in enumerate(data_loader):
             # Take time
             elapsed = time.time()
@@ -211,7 +200,7 @@ def main():
             optimizer.zero_grad()
 
             """ Detach hidden layers """
-            hidden = repackage_hidden(hidden) # Function from PyTorch NLP official example
+            hidden = utils.repackage_hidden(hidden) # Function from PyTorch NLP official example
 
             """ Feedforward """
             # Feedforward
@@ -245,6 +234,7 @@ def main():
                                   data_time=data_time, 
                                   loss_s=sum_losses_syll, 
                                   loss_l=sum_losses_lyric))
+        return sum_losses_lyric.avg, sum_losses_syll.avg
 
 
     def test(data_set, data_loader):
@@ -258,23 +248,61 @@ def main():
     """ Run Epochs """
     lp.lprint("------ Training -----", True)
     first_start_time = time.time()
+    train_lyric_loss_vec = []
+    train_syll_loss_vec = []
+    val_lyric_loss_vec = []
+    val_syll_loss_vec = []
     for epoch in range(num_epochs):
         # Training 
-        # print("TRAAAAAAINING")
-        train(epoch, train_data_set, train_data_loader)
+        train_lyric_loss, train_syll_loss = train(epoch, train_data_set, train_data_loader)
+        train_lyric_loss_vec.append(train_lyric_loss)
+        train_syll_loss_vec.append(train_syll_loss)
         lp.lprint("", True)
 
         # Validation
         with torch.no_grad():
-            validation(epoch, val_data_set, val_data_loader)
+            val_lyric_loss, val_syll_loss = validation(epoch, val_data_set, val_data_loader)
+            val_lyric_loss_vec.append(val_lyric_loss)
+            val_syll_loss_vec.append(val_syll_loss)
             lp.lprint("", True)
 
             # Save checkpoint
             save_model(epoch)
-    
+
+        # Plot training loss
+        plt.figure('train', (6, 3))
+        plt.subplot(1, 2, 1)
+        plt.title('Training lyric loss')
+        plt.ylabel('Train lyric loss')
+        plt.xlabel('Epoch')
+        plt.plot(train_lyric_loss_vec)
+        plt.subplot(1, 2, 2)
+        plt.title('Training syllable loss')
+        plt.ylabel('Train syllable loss')
+        plt.xlabel('Epoch')
+        plt.plot(train_syll_loss_vec)
+        plt.show()
+
+        # Plot validation loss
+        plt.figure('validation', (6, 3))
+        plt.subplot(1, 2, 1)
+        plt.title('Validation lyric loss')
+        plt.ylabel('Validation lyric loss')
+        plt.xlabel('Epoch')
+        plt.plot(val_lyric_loss_vec)
+        plt.subplot(1, 2, 2)
+        plt.title('Validation syllable loss')
+        plt.ylabel('Validation syllable loss')
+        plt.xlabel('Epoch')
+        plt.plot(val_syll_loss_vec)
+        plt.show()
+
+
         lp.lprint("-----------", True)
-    elapsed = time.time() - first_start_time
-    lp.lprint('Total elapsed time: {elapsed:7.2f}/60 minutes'.format(elapsed=elapsed))
+    elapsed = (time.time() - first_start_time)/60
+    print("Elapsed = ", elapsed)
+    lp.lprint('Total elapsed time: {elapsed:7.2f} minutes'.format(elapsed=elapsed))
+    torch.cuda.empty_cache()
     
 
 
@@ -305,6 +333,7 @@ if __name__ == "__main__":
     
     # Update local variables
     locals().update(settings)
+
     # Redefine variables to avoid annoying text editor errors
     lr = lr
     batch_size = batch_size
@@ -319,6 +348,7 @@ if __name__ == "__main__":
     data = data
     num_epochs = num_epochs
     log_interval = log_interval
+    num_layers = num_layers
 
 
     main()

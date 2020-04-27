@@ -7,11 +7,12 @@
     "melody_dim": 256,
     "seed": 0,
     "num_workers": 4,
-    "num_epochs": 5,
+    "num_epochs": 10,
     "batch_size": 32,
     "lr": 0.001,
     "log_interval": 10,
     "train_rate": 0.8,
-    "val_rate": 0.1,
-    "test_rate": 0.1
+    "val_rate": 0.2,
+    "test_rate": 0,
+    "num_layers": 1
 }

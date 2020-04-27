@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import numpy as np
+import torch
 
 class AverageMeter(object):
     def __init__(self):
@@ -50,9 +51,18 @@ def load_settings(settings):
     settings_loaded = json.load(open(settings_path, 'r'))
 
     # Check for missing settings in file
-    for key in settings.keys():
-        if not key in settings_loaded:
-            print(key, " not found in loaded settings")
+    # for key in settings.keys():
+    #     if not key in settings_loaded:
+    #         print(key, " not found in loaded settings")
     
     settings.update(settings_loaded)
     return settings
+
+# Function from PyTorch NLP official example
+def repackage_hidden(h):
+    """Wraps hidden states in new Tensors, to detach them from their history."""
+
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    else:
+        return tuple(repackage_hidden(v) for v in h)

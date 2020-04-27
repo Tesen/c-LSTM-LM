@@ -4,11 +4,11 @@ from torch import nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 
-class CLMM(nn.Module):
-    def __init__(self, word_dim, melody_dim, syllable_size, word_size, feature_size):
-        super(CLMM, self).__init__()
+class CLLM(nn.Module):
+    def __init__(self, word_dim, melody_dim, syllable_size, word_size, feature_size, num_layers):
+        super(CLLM,  self).__init__()
         self.hidden_dim = word_dim + melody_dim
-
+        
         """ Word embedding """
         self.embedding = nn.Embedding(word_size, word_dim)
 
@@ -16,7 +16,7 @@ class CLMM(nn.Module):
         self.fc_melody = nn.Linear(feature_size, melody_dim) # Fully connected layer
 
         """ LSTM """
-        self.rnn = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, num_layers=1, bias=True, batch_first=True, bidirectional=False)
+        self.rnn = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, num_layers=num_layers, bias=True, batch_first=True, bidirectional=False)
 
         """ Output """
         self.fc_lyrics_out = nn.Linear((self.hidden_dim), word_size) # Fully connected layer
