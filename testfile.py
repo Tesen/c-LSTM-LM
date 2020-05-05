@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
+import os
 import json
 import time
-import datetime
+from datetime import datetime
 import argparse
-from data import SongLyricDataset, collate_fn
+from data2 import SongLyricDataset, collate_fn
 import random
 import numpy as np
 import torch
@@ -96,8 +97,22 @@ class LogPrint:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     """ Data parameter """
-    parser.add_argument("-data", "--data", dest="data", default="./conditional-LSTM-language-model/sample_dataset2", type=str, help="alignment data")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./conditional-LSTM-language-model/checkpoint/model", type=str, help="save path")
+    parser.add_argument("-data", "--data", dest="data", default="./c-LSTM-LM/test_dataset", type=str, help="alignment data")
+    date = datetime.date(datetime.now())
+    checkpoint = './c-LSTM-LM/test-checkpoint' + str(date)+ 'v1'
+    bol = True
+    while bol:
+        try:
+            if not os.path.exists(checkpoint):
+                os.mkdir(checkpoint)
+            bol = False
+        except FileExistsError:
+            ver = int(checkpoint[-1]) + 1
+            checkpoint = list(checkpoint)
+            checkpoint[-1] = str(ver)
+            checkpoint = ''.join(checkpoint)
+
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default=checkpoint, type=str, help="save path")
 
     """ Feature parameter """
     parser.add_argument("-window", "--window", dest="window", default=10, type=int, help="window size of melody featrure (default: 10)")
@@ -119,11 +134,12 @@ if __name__ == "__main__":
     parser.add_argument("-verbose", "--verbose", dest="verbose", default=1, type=int, help="verbose 0/1")
     args = parser.parse_args()
 
+    
     """ Save parameter """
     if args.verbose == 1:
-        lp = LogPrint(args.checkpoint + ".log", True)
+        lp = LogPrint(checkpoint + "/model" + ".log", True)
     else:
-        lp = LogPrint(args.checkpoint + ".log", False)
+        lp = LogPrint(checkpoint + "/model" + ".log", False)
     argparse_dict = vars(args)
     lp.lprint("------ Parameters -----", True)
     for k, v in argparse_dict.items():

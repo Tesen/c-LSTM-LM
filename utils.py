@@ -45,7 +45,7 @@ def load_settings(settings):
     """
 
     # Define settings path
-    settings_path = './settings/' + settings['settings_file']
+    settings_path = './c-LSTM-LM/settings/' + settings['settings_file']
     print("Loading settings from: %s"%settings_path)
 
     settings_loaded = json.load(open(settings_path, 'r'))

@@ -46,8 +46,41 @@ def get_length(length):
     else:
         return 7680
 
-def convert(mid_file):
-    mid = mido.MidiFile(mid_file, ticks_per_beat=480)
+def miditix_2_notelenghts(length):
+    length = int(length)
+    if length <= 40:
+        return 0
+    elif length <= 80:
+        return .25
+    elif length <= 180:
+        return .25
+    elif length <= 300:
+        return .5
+    elif length <= 420:
+        return .75
+    elif length <= 600:
+        return 1.0
+    elif length <= 840:
+        return 1.0
+    elif length <= 1080:
+        return 1.5
+    elif length <= 1320:
+        return 2.0
+    elif length <= 1560:
+        return 2.0
+    elif length <= 1800:
+        return 3.0
+    elif length <= 2880:
+        return 4.0
+    elif length <= 4800:
+        return 8.0
+    elif length <= 4560:
+        return 16.0
+    else:
+        return 32.0
+
+def convert(midi_file):
+    mid = mido.MidiFile(midi_file, ticks_per_beat=480)
     on_queue = defaultdict(list)
     current_position = 0
     notes = []
@@ -74,7 +107,7 @@ def convert(mid_file):
 
     fsp = notes[0][1]
     prev_end_position = 0
-    notes4generation = [("rest", "7680")]
+    notes4generation = [("rest", "32.0")]
     for note in notes:
         note_number = note[0]
         start_position = note[1] - fsp
@@ -82,30 +115,32 @@ def convert(mid_file):
         if start_position < prev_end_position:
             continue
         elif start_position == prev_end_position:
-            _temp_duraton = get_length(duration)
-            if _temp_duraton > 0:
-                notes4generation.append((str(note_number), str(_temp_duraton)))
+            _temp_duration = get_length(duration)
+            if _temp_duration > 0:
+                new_note_dur = miditix_2_notelenghts(_temp_duration)
+                notes4generation.append((str(note_number), str(new_note_dur)))
         else:
             rest_duration = get_length(start_position - prev_end_position)
             rest_start_position = prev_end_position
-            notes4generation.append(("rest", str(rest_duration)))
-            _temp_duraton = get_length(duration)
-            if _temp_duraton > 0:
-                notes4generation.append((str(note_number), str(_temp_duraton)))
+            new_rest_dur = miditix_2_notelenghts(rest_duration)
+            notes4generation.append(("rest", str(new_rest_dur)))
+            _temp_duration = get_length(duration)
+            if _temp_duration > 0:
+                new_note_dur = miditix_2_notelenghts(_temp_duration)
+                notes4generation.append((str(note_number), str(new_note_dur)))
         prev_end_position = start_position + duration
-    notes4generation.append(("rest", "7680"))
-
+    notes4generation.append(("rest", "32.0"))
+    print(notes4generation)
     return notes4generation
 
 
 
 def main(args):
     notes = convert(args.midi)
-    print(json.dumps({"melody":notes}))
-
+    # print(json.dumps({"melody":notes}))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-midi", "--midi", dest="midi", default="../sample_data/メルト.mid", type=str, help="MIDI file")
+    parser.add_argument("-midi", "--midi", dest="midi", default="./c-LSTM-LM/sample_data/sample.midi", type=str, help="MIDI file")
     args = parser.parse_args()
     main(args)

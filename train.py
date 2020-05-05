@@ -8,7 +8,8 @@ import  time
 import numpy as np
 import utils
 import matplotlib.pyplot as plt
-from data import SongLyricDataset, collate_fn
+# from data import SongLyricDataset, collate_fn
+from data2 import SongLyricDataset, collate_fn
 from model import CLLM
 import torch
 import torch.nn as nn
@@ -315,7 +316,7 @@ if __name__ == "__main__":
     settings = vars(args)
     settings = utils.load_settings(settings)
     
-    print(settings["checkpoint"])
+    # print(settings["checkpoint"])
 
     if args.verbose == 1:
         lp = utils.LogPrint(settings['checkpoint'] + '.log', True)
