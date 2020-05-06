@@ -57,7 +57,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
     """ Load model """
     model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=1).to(device)
-    model.load_state_dict(torch.load(checkpoint + "model_25.pt"))
+    model.load_state_dict(torch.load(checkpoint + "model_15.pt"))
     model.eval()
     hidden = model.init_hidden(1)
 
@@ -315,6 +315,25 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
 def save_lyrics(generated, notes, output_dir):
     
+    out_file = open(output_dir + 'output.txt', 'w')
+
+    bb = "<BB>|<null>"
+    bl = "<BL>|<null>"
+    
+    line = []
+    for word in generated:
+        if word == bl:
+            out_file.write(" ".join(line) + '\n') # Write line boundary
+            line = []
+        if word == bb:
+            out_file.write(" ".join(line) + '\n\n') # Write block boundary
+        else:
+            line.append(word)
+        
+    if len(line) > 0:
+        out_file.write(" ".join(line) + '\n')
+            
+    
 
 
 def main(args):
@@ -325,11 +344,11 @@ def main(args):
 
     notes = convert(args.midi)
     with torch.no_grad():
-        lyrics, positions, score = generate(notes=notes, 
+        generated_lyrics, positions, score = generate(notes=notes, 
                                             param=args.param, checkpoint=args.checkpoint, 
                                             seed=args.seed, window=args.window, 
                                             temperature=args.temperature)
-    save_lyrics(lyrics, notes, args.output)
+    save_lyrics(generated_lyrics, notes, args.output)
 
 
 if __name__ == "__main__":

@@ -130,7 +130,6 @@ def convert(midi_file):
                 notes4generation.append((str(note_number), str(new_note_dur)))
         prev_end_position = start_position + duration
     notes4generation.append(("rest", "32.0"))
-    print(notes4generation)
     return notes4generation
 
 

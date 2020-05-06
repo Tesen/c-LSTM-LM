@@ -4,7 +4,7 @@ import sys
 import argparse
 import json
 import random
-import  time
+import time
 import numpy as np
 import utils
 import matplotlib.pyplot as plt
@@ -42,15 +42,15 @@ def main():
     lp.lprint("{:>12}:  {}".format("syllable size", data_syllable_size), True)
 
     """ Save vocab arrays and models to checkpoint """
-    with open(checkpoint + '.feature.json', 'w') as f:
+    with open(checkpoint + 'model.feature.json', 'w') as f:
         f.write(json.dumps(data_set.idx2feature))
 
-    with open(checkpoint + '.vocab.json', 'w') as f:
+    with open(checkpoint + 'model.vocab.json', 'w') as f:
         f.write(json.dumps(data_set.idx2word))
 
-    with open(checkpoint + '.param.json', 'w') as f:
-        f.write(json.dumps({"feature_idx_path": checkpoint+'.feature.json',
-                            "vocab_idx_path": checkpoint+'.vocab.json',
+    with open(checkpoint + 'model.param.json', 'w') as f:
+        f.write(json.dumps({"feature_idx_path": checkpoint+'model.feature.json',
+                            "vocab_idx_path": checkpoint+'model.vocab.json',
                             "word_dim": word_dim,
                             "syllable_size": data_syllable_size,
                             "melody_dim": melody_dim,
@@ -92,6 +92,14 @@ def main():
     """ Load CLLM model """
     model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size, num_layers=num_layers).to(device)
 
+    pp=0
+    for p in list(model.parameters()):
+        nno=1
+        for s in list(p.size()):
+            nno = nno*s
+        pp += nno
+    print("Number of parameters: ", pp)
+
     """ Build Optimizers """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
     loss_criterion = nn.CrossEntropyLoss() # Combines LogSoftmax() and NLLLoss() (Negative log likelihood loss)
@@ -114,7 +122,12 @@ def main():
             # Take time
             elapsed = time.time()
             data_time.update((elapsed - start_time)*1000)
-
+            
+            # Check so that we got the correct batch size
+            local_bs = lyric.size(0)
+            if local_bs != args.batch_size:
+                continue
+            
             """ Move dataloaders to GPU """
             syllable = syllable.to(device)
             lyric = lyric.to(device)
@@ -132,7 +145,7 @@ def main():
 
             """ Feedforward """
             # Feedforward
-            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths)
+            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths, hidden)
             
             # Define packed padded targets
             target_syllable = pack_padded_sequence(syllable[:, 1:], lengths-1, batch_first=True)[0]
@@ -188,6 +201,10 @@ def main():
             elapsed = time.time()
             data_time.update((elapsed - start_time)*1000)
 
+            local_bs = lyric.size(0)
+            if local_bs != args.batch_size:
+                continue
+
             """ Move dataloaders to GPU """
             syllable = syllable.to(device)
             lyric = lyric.to(device)
@@ -197,15 +214,12 @@ def main():
             """ Remove first melody feature """
             melody = melody[:, 1:] # We dont really want to do this?
 
-            """ Reset gradient to zero """
-            optimizer.zero_grad()
-
             """ Detach hidden layers """
             hidden = utils.repackage_hidden(hidden) # Function from PyTorch NLP official example
 
             """ Feedforward """
             # Feedforward
-            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths)
+            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths, hidden)
             
             # Define packed padded targets
             target_syllable = pack_padded_sequence(syllable[:, 1:], lengths-1, batch_first=True)[0]
@@ -283,6 +297,7 @@ def main():
         plt.xlabel('Epoch')
         plt.plot(train_syll_loss_vec)
         plt.show()
+        plt.savefig('training_loss.png')
 
         # Plot validation loss
         plt.figure('validation', (6, 3))
@@ -297,6 +312,7 @@ def main():
         plt.xlabel('Epoch')
         plt.plot(val_syll_loss_vec)
         plt.show()
+        plt.savefig('validation_loss.png') 
 
 
         lp.lprint("-----------", True)
@@ -316,7 +332,8 @@ if __name__ == "__main__":
     settings = vars(args)
     settings = utils.load_settings(settings)
     
-    # print(settings["checkpoint"])
+    if not os.path.exists(settings['checkpoint']):
+        os.mkdir(settings['checkpoint'])
 
     if args.verbose == 1:
         lp = utils.LogPrint(settings['checkpoint'] + '.log', True)

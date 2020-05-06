@@ -27,7 +27,7 @@ class CLLM(nn.Module):
         self.bn_lyrics = nn.BatchNorm1d(word_size)
         self.bn_syllables = nn.BatchNorm1d(syllable_size)
 
-    def forward(self, lyrics, melody, lengths):
+    def forward(self, lyrics, melody, lengths, hidden):
         lengths = lengths - 1
         local_batch_size = lyrics.shape[0]
 
@@ -42,7 +42,7 @@ class CLLM(nn.Module):
         input_vec = pack_padded_sequence(input_vec, lengths, batch_first=True)
 
         """ RNN """
-        output, hidden = self.rnn(input_vec)
+        output, hidden = self.rnn(input_vec, hidden)
 
         """ Output """
         lyrics_output = self.fc_lyrics_out(output[0])
