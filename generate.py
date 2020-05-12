@@ -57,7 +57,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
     """ Load model """
     model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=1).to(device)
-    model.load_state_dict(torch.load(checkpoint + "model_15.pt"))
+    model.load_state_dict(torch.load(checkpoint + "_35.pt"))
     model.eval()
     hidden = model.init_hidden(1)
 
@@ -126,7 +126,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
             lengths = torch.Tensor([1]).long().to(device)
 
-            # 1. Create word input vector
+            # 1. Create word input tensor
             x_word = torch.Tensor([[old_path[0]]]).long().to(device)
 
             # 2. Create melody input vector
@@ -154,15 +154,13 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
             x_midi = torch.Tensor(x_midi).to(device)
 
             # 3. Generate word
-            hidden = repackage_hidden(hidden)
-            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1)
+            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1, hidden)
 
             # Apply softmax layer to text output
             dist = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()[0]
             dist[word2idx["<unk>"]] = 0.0
-            # print("First dist: ", type(dist))
             stack = set()
-
+            
             for x in range(100*window):
                 new_index = sample(dist, temperature) # Sample word from probabiltity distribution of words
                 new_word = idx2word[str(new_index)]
@@ -170,7 +168,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
                 new_note_positions = old_note_positions + (update_note_position(notes, old_note_positions[-1], new_word), )
                 prob = math.log(dist[new_index])
                 stack.add((new_path, new_note_positions, prob))
-                if len(stack) >= window:
+                if len(stack) >= window: 
                     break
             
             for new in stack:
@@ -219,17 +217,15 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
             lengths = torch.Tensor([t+1]*window).long().to(device)
 
             # 3. Generate word
-            hidden = repackage_hidden(hidden)
-            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1)
+            hidden = model.init_hidden(20)
+            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1, hidden)
 
             # We only want the last output
             lyrics_output = lyrics_output[-window::]
             dists = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()
-            # print("Second dists: ", type(dists), np.shape(dists))
             stack = set()
             for y in range(len(prob_forward[t-1])):
                 dist = dists[y]
-                # print("Third dist: ", type(dist), np.shape(dist))
                 dist[word2idx["<unk>"]] = 0.0
                 old_path = prob_forward[t-1][y][0]
 
@@ -282,6 +278,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
                 for item in temp_stack:
                     stack.add(item)
+                    
 
             count = 0
             for path, note_positions, prob in sorted(list(stack), key=lambda x:x[2], reverse=True):
@@ -307,7 +304,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
             break
                         
     # 5. Determine and return output        
-    path, note_positions, score = max(accepted_lyrics, key=lambda x:x[2])
+    path, note_positions, score = max(accepted_lyrics, key=lambda x:x[2]) # Is this where we should sample?
     generated = [idx2word[str(idx)] for idx in path[1::]]
                    
     return generated, note_positions, score
@@ -319,19 +316,64 @@ def save_lyrics(generated, notes, output_dir):
 
     bb = "<BB>|<null>"
     bl = "<BL>|<null>"
-    
+
+    word_vec = []
     line = []
+    bbs = []
+    bls = []
+    word_idx = 0
+    # Save txt file
     for word in generated:
+        print("Generated %s: %s"%(word_idx, word))
         if word == bl:
             out_file.write(" ".join(line) + '\n') # Write line boundary
+            bbs.append(word_idx)
             line = []
         if word == bb:
             out_file.write(" ".join(line) + '\n\n') # Write block boundary
+            line = []
+            bls.append(word_idx)
         else:
             line.append(word)
+            word_vec.append([word, word_idx])
+            word_idx += 1
         
     if len(line) > 0:
         out_file.write(" ".join(line) + '\n')
+
+    # Save note feature array file
+    song = {'lyrics': []}
+    temp_lyrics = []
+
+    print("\nlen(note): ", len(notes))
+    print("len(word_vec): ", len(word_vec))
+
+    with open(output_dir + 'output.readable', 'w') as f:
+        for note_idx, (num, length) in enumerate(notes):
+            length = int(float(length))
+            # if note_idx >= len(generated):
+            #     break
+            
+            word = word_vec[note_idx][0]
+            word_idx = word_vec[note_idx][1]
+            # note = [note_number, word_index, note_type, duration, word, syllable, feature_type]
+            # note[0] = note_number, note[1] = word_index, note[2] = note_type(rest) or MIDI_number, note[3] = duration 
+            # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
+            if note_idx in bbs:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, '<BB>'])
+            elif note_idx in bls:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, '<BL>'])
+            else:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, '<WORD>'])
+
+            print(temp_lyrics)
+            f.write("%s\n" %temp_lyrics[-1])
+
+
+
+
+
+    
             
     
 
@@ -355,11 +397,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     """ Data parameter """
     parser.add_argument("-midi", "--midi", dest="midi", default="./c-LSTM-LM/sample_data/sample.midi", type=str, help="MIDI file")
-    parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/output/", type=str, help="Output directory")
+    parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_30042020_1800/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_30042020_1800/", type=str, help="Checkpoint file path")
+    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_06052020_1200/model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_06052020_1200/", type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")

@@ -257,7 +257,7 @@ def main():
 
     def save_model(epoch):
         model.eval()
-        with open(checkpoint+"_%02d.pt"%(epoch+1), 'wb') as f:
+        with open(checkpoint+"model_%02d.pt"%(epoch+1), 'wb') as f:
             torch.save(model.state_dict(), f)
 
     """ Run Epochs """
@@ -336,9 +336,9 @@ if __name__ == "__main__":
         os.mkdir(settings['checkpoint'])
 
     if args.verbose == 1:
-        lp = utils.LogPrint(settings['checkpoint'] + '.log', True)
+        lp = utils.LogPrint(settings['checkpoint'] + 'model.log', True)
     else:
-        lp = utils.LogPrint(settings['checkpoint'] + '.log', False)
+        lp = utils.LogPrint(settings['checkpoint'] + 'model.log', False)
 
     # Print settings
     lp.lprint("------ Parameters -----", True)
