@@ -123,6 +123,7 @@ class SongLyricDataset(data.Dataset):
         self.idx2word[2] = "<BB>|<null>"
         self.idx2word[3] = "<BL>|<null>"
         
+        self.word2syllables = {}
         idx = 4
         syllables = set()
 
@@ -130,8 +131,9 @@ class SongLyricDataset(data.Dataset):
         print("Number of unique words: %s" %len(word_dict.items()))
         for word, freq in sorted(word_dict.items(), key=lambda x:x[1], reverse=True)[:word_size:]: # Sort word_dict after frequency and limit size to word_size (size of our dictionary)
             # Add number of syllables for each word, calculate average number of syllables per word and average
-            syllables.add(np.round(syll_dict[word]/freq))
-
+            avg_syl = np.round(syll_dict[word]/freq)
+            syllables.add(avg_syl)
+            self.word2syllables[word] = avg_syl
             # Build word/index dictionaries
             self.word2idx[word] = idx
             self.idx2word[idx] = word
@@ -206,7 +208,7 @@ class SongLyricDataset(data.Dataset):
                             feature = [] # Initiatie the feature vector which is to contain the 
 
                             w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
-                            lyrics.append(w_idx) # Append lyric array with feature
+                            lyrics.append(w_idx) # Append lyric array with feature index
                             syllables.append(1) # Append syllable array with 1
 
                             prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]

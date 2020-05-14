@@ -48,6 +48,9 @@ def main():
     with open(checkpoint + 'model.vocab.json', 'w') as f:
         f.write(json.dumps(data_set.idx2word))
 
+    with open(checkpoint + 'model.syllables.json', 'w') as f:
+        f.write(json.dumps(data_set.word2syllables))
+
     with open(checkpoint + 'model.param.json', 'w') as f:
         f.write(json.dumps({"feature_idx_path": checkpoint+'model.feature.json',
                             "vocab_idx_path": checkpoint+'model.vocab.json',
