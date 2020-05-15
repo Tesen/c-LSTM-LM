@@ -41,15 +41,22 @@ def main():
     lp.lprint("{:>12}:  {}".format("feature size", data_feature_size), True)
     lp.lprint("{:>12}:  {}".format("syllable size", data_syllable_size), True)
 
-    """ Save vocab arrays and models to checkpoint """
+    """ Save dictionaries and models to checkpoint """
     with open(checkpoint + 'model.feature.json', 'w') as f:
         f.write(json.dumps(data_set.idx2feature))
 
     with open(checkpoint + 'model.vocab.json', 'w') as f:
         f.write(json.dumps(data_set.idx2word))
 
+    with open(checkpoint + 'model.word2idx.json', 'w') as f:
+        f.write(json.dumps(data_set.word2idx))
+
     with open(checkpoint + 'model.syllables.json', 'w') as f:
         f.write(json.dumps(data_set.word2syllables))
+
+    with open(checkpoint + 'model.idx2syllable.json', 'w') as f:
+        f.write(json.dumps(data_set.idx2syllable))
+
 
     with open(checkpoint + 'model.param.json', 'w') as f:
         f.write(json.dumps({"feature_idx_path": checkpoint+'model.feature.json',

@@ -61,7 +61,7 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0):
 
     """ Load model """
     model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=1).to(device)
-    model.load_state_dict(torch.load(checkpoint + "model_15.pt"))
+    model.load_state_dict(torch.load(checkpoint + "model_14.pt"))
     model.eval()
     hidden = model.init_hidden(1)
 
@@ -318,9 +318,7 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
 
     # Load syllable countss
     word2syllablecnt = json.loads(open(checkpoint + "model.syllables.json", 'r').readline())
-
-    bb = '<BB>|<null>'
-    bl = '<BL>|<null>'
+    print(word2syllablecnt)
 
     word_vec = []
     line = []
@@ -328,10 +326,12 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
     bls = []
     
     word_idx = 0
-    temp_syllcnt = 0
+    temp_syllcnt = 1
     # Save txt file
-    for word in generated:
-        print("Generated %s: %s"%(word_idx, word))
+    for k, word in enumerate(generated):
+        if k == 0: # Skip first note
+            continue
+
         if word.startswith("<BL>"):
             out_file.write(" ".join(line) + '\n') # Write line boundary
             bbs.append(word_idx)
@@ -342,6 +342,7 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
             bls.append(word_idx)
         else:
             syllcnt = word2syllablecnt[word]
+            print("Syllcnt = ", (word, syllcnt))
             if temp_syllcnt < syllcnt:
                 temp_syllcnt += 1
             elif temp_syllcnt == syllcnt:
@@ -350,7 +351,10 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
                 temp_syllcnt = 0
             
             word_vec.append([word, word_idx])
-        
+    
+    for (word, word_idx) in word_vec:
+        print("Word_vec: ", (word_idx, word))
+
     if len(line) > 0:
         out_file.write(" ".join(line) + '\n')
 
@@ -365,8 +369,6 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
     
     for note_idx, (num, length) in enumerate(notes):
         length = int(float(length))
-        # if note_idx >= len(generated):
-        #     break
         
         if cnt >= len(word_vec):
             break
@@ -377,8 +379,6 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
         # note = [note_number, word_index, note_type, duration, word, syllable, feature_type]
         # note[0] = note_number, note[1] = word_index, note[2] = note_type(rest) or MIDI_number, note[3] = duration 
         # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
-
-        
 
         if num == 'rest':
             temp_lyrics.append([note_idx, num, length])
@@ -432,15 +432,15 @@ def main(args):
 
     notes = convert(args.midi)
     print("Notes: ", notes)
-    # with torch.no_grad():
-    #     generated_lyrics, positions, score = generate(notes=notes, 
-    #                                         param=args.param, checkpoint=args.checkpoint, 
-    #                                         seed=args.seed, window=args.window, 
-    #                                         temperature=args.temperature)
+    with torch.no_grad():
+        generated_lyrics, positions, score = generate(notes=notes, 
+                                            param=args.param, checkpoint=args.checkpoint, 
+                                            seed=args.seed, window=args.window, 
+                                            temperature=args.temperature)
 
-    # save_generate = np.array(generated_lyrics)
-    # np.save('c-LSTM-LM/test_output/generated.lyrics', generated_lyrics)
-    generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
+    save_generate = np.array(generated_lyrics)
+    np.save('c-LSTM-LM/test_output/generated1.lyrics', generated_lyrics)
+    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
     save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
     
@@ -453,8 +453,8 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_12052020_1500/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_12052020_1500/", type=str, help="Checkpoint file path")
+    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_15052020_1100/model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_15052020_1100/", type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")

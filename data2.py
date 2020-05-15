@@ -78,7 +78,7 @@ class SongLyricDataset(data.Dataset):
         syll_dict = defaultdict(int)
         
         # Limit number of songs for testing
-        # files = files[0:4] 
+        # subfolders = subfolders[0:4] 
 
         # For each song
         print("Loading data and creating word and syllable vocabularies.")
@@ -104,7 +104,7 @@ class SongLyricDataset(data.Dataset):
                     # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
                     word_idx = note[1]
                     if word_idx != old_word_idx:
-                        word_lower = note[5].lower()
+                        word_lower = note[4].lower()
                         word_dict[word_lower] += 1
                         syll_dict[word_lower] += len(note[6])
             skipcnt = skipcnt + skipperi            
@@ -291,7 +291,7 @@ class SongLyricDataset(data.Dataset):
                         feature = []
                         w_idx = self.word2idx.get(note[4], self.word2idx["<unk>"])
                         lyrics.append(w_idx) # Append lyric array with feature index
-                        syllables.append(len(note[6])) # Append sylable array with number of features
+                        syllables.append(len(note[6])) # Append sylable array with number of syllalbes
 
                         prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
                         feature.append(prev_tag)
