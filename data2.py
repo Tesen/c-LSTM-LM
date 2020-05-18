@@ -72,6 +72,7 @@ class SongLyricDataset(data.Dataset):
         """ Load data and create word and syllable vocab """
         # Load data
         subfolders = os.listdir(data)
+        # subfolders = subfolders[0:10] # Limit data for test
 
         # Initialize word occurance dictionary
         word_dict = defaultdict(int)

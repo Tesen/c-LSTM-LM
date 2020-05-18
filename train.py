@@ -10,7 +10,7 @@ import utils
 import matplotlib.pyplot as plt
 # from data import SongLyricDataset, collate_fn
 from data2 import SongLyricDataset, collate_fn
-from model import CLLM
+from deeper_model import CLLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

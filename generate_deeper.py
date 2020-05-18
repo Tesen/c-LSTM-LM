@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from collections import defaultdict
-from model import CLLM
+from deeper_model import deepCLLM
 
 import logging
 logging.disable(logging.FATAL)
@@ -29,9 +29,8 @@ def sample(preds, temperature=1.0):
     probas = np.random.multinomial(1, preds, 1)
     return np.argmax(probas)
 
-def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_model = ""):
+def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_model = ""):
     """ Set the random seed manually for reproducibility """
-    print("THEEE FUUUUCK")
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -61,8 +60,8 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_mod
     print("word2syllablecnt: ", word2syllablecnt)
 
     """ Load model """
-    model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=1).to(device)
-    model.load_state_dict(torch.load(checkpoint + "model_10.pt"))
+    model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=3).to(device)
+    model.load_state_dict(torch.load(checkpoint + LM_model))
     model.eval()
     hidden = model.init_hidden(1)
 
@@ -433,17 +432,19 @@ def main(args):
         print("{:>16}:  {}".format(k, v))
 
     notes = convert(args.midi)
-    print("Notes: ", notes)
-    # with torch.no_grad():
-    #     generated_lyrics, positions, score = generate(notes=notes, 
-    #                                         param=args.param, checkpoint=args.checkpoint, 
-    #                                         seed=args.seed, window=args.window, 
-    #                                         temperature=args.temperature, LM_model = args.LM_model)
+    print("Notes: ", notes, type(notes))
+    # save_notes = np.array(notes)
+    np.save('c-LSTM-LM/test_output/notes.npy', notes)
 
-    # save_generate = np.array(generated_lyrics)
-    # model_name = args.LM_model.split('.')[0]
-    # np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
-    generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
+    with torch.no_grad():
+        generated_lyrics, positions, score = generate_deeper(notes=notes, 
+                                            param=args.param, checkpoint=args.checkpoint, 
+                                            seed=args.seed, window=args.window, 
+                                            temperature=args.temperature, LM_model = args.LM_model)
+
+    model_name = args.model.split('.')[0]
+    np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
+    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
     save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
     
@@ -456,14 +457,13 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_12052020_1500/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_12052020_1500/", type=str, help="Checkpoint file path")
+    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_15052020_1300/model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_15052020_1300/", type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
     parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
     parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
-    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_15.pt", type=str, help="Model number of checkpoint")
-    
+    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_14.pt", type=str, help="Model number of checkpoint")
     args = parser.parse_args()
     main(args)
