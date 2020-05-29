@@ -10,7 +10,8 @@ import utils
 import matplotlib.pyplot as plt
 # from data import SongLyricDataset, collate_fn
 from data2 import SongLyricDataset, collate_fn
-from deeper_model import CLLM
+from deeper_model import deepCLLM
+from model import CLLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -75,7 +76,7 @@ def main():
     validation_size = int((n_samples - train_size)/2)
     test_size = validation_size
     
-    train_data_set, val_data_set, test_data_set = torch.utils.data.random_split(data_set, [train_size, validation_size, test_size])
+    train_data_set, val_data_set = torch.utils.data.random_split(data_set, [train_size, validation_size])
 
     print("Training set: ", len(train_data_set), " songs, Validation set: ", len(val_data_set), " songs, "
           "Test set: ", len(test_data_set), " songs.")
@@ -100,7 +101,10 @@ def main():
     #                                               collate_fn=collate_fn)
 
     """ Load CLLM model """
-    model = CLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size, num_layers=num_layers).to(device)
+    model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size, num_layers=num_layers).to(device)
+
+    # Calculate number of parameters in model
+    utils.model_summary(model)
 
     pp=0
     for p in list(model.parameters()):
@@ -109,6 +113,7 @@ def main():
             nno = nno*s
         pp += nno
     print("Number of parameters: ", pp)
+
 
     """ Build Optimizers """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
@@ -277,6 +282,7 @@ def main():
     train_syll_loss_vec = []
     val_lyric_loss_vec = []
     val_syll_loss_vec = []
+    epoch_cnt = 0
     for epoch in range(num_epochs):
         # Training 
         train_lyric_loss, train_syll_loss = train(epoch, train_data_set, train_data_loader)
@@ -292,7 +298,9 @@ def main():
             lp.lprint("", True)
 
             # Save checkpoint
-            save_model(epoch)
+            if epoch_cnt%save_interval == 0:
+                save_model(epoch)
+        epoch_cnt += 1
 
         # Plot training loss
         plt.figure('train', (6, 3))
@@ -376,7 +384,9 @@ if __name__ == "__main__":
     data = data
     num_epochs = num_epochs
     log_interval = log_interval
+    save_interval = save_interval
     num_layers = num_layers
+    
 
 
     main()

@@ -79,7 +79,7 @@ class SongLyricDataset(data.Dataset):
         syll_dict = defaultdict(int)
         
         # Limit number of songs for testing
-        # subfolders = subfolders[0:4] 
+        subfolders = subfolders[0:2] 
 
         # For each song
         print("Loading data and creating word and syllable vocabularies.")

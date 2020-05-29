@@ -1,6 +1,6 @@
 {
     "data": "./dataset_creation/augmented_dataset3_sorted",
-    "checkpoint": "./c-LSTM-LM/checkpoint_15052020_1300/",
+    "checkpoint": "./c-LSTM-LM/checkpoint_18052020_1600/",
     "window": 10,
     "word_size": 20000,
     "word_dim": 512,
@@ -11,8 +11,9 @@
     "batch_size": 32,
     "lr": 0.001,
     "log_interval": 5,
-    "train_rate": 0.8,
-    "val_rate": 0.2,
+    "save_interval": 5,
+    "train_rate": 0.9,
+    "val_rate": 0.1,
     "test_rate": 0,
     "num_layers": 3
 }

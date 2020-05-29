@@ -225,15 +225,17 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
             # 3. Generate word
             hidden = model.init_hidden(20)
-            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1, hidden)
+            syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1, hidden) # Forward pass
 
             # We only want the last output
             lyrics_output = lyrics_output[-window::]
             dists = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()
             stack = set()
             for y in range(len(prob_forward[t-1])):
-                dist = dists[y]
+                dist = dists[y] # Generated probability distribution
                 dist[word2idx["<unk>"]] = 0.0
+
+                # Create path for this generated distribution
                 old_path = prob_forward[t-1][y][0]
 
                 if old_path[-1] in (bb, bl):
@@ -250,7 +252,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
                 temp_stack = set()
                 for z in range(100*window):
-                    new_index = sample(dist, temperature)
+                    new_index = sample(dist, temperature) # Sample from distribution
                     if new_segment and new_index in (bb, bl):
                         continue
                     if new_index == bb:
@@ -261,7 +263,9 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                     new_word = idx2word[str(new_index)]
                     new_path = old_path + (new_index, )
                     new_note_positions = old_note_positions + (update_note_position(notes, old_note_positions[-1], new_word), )
-                    prob = math.log(dist[new_index]) +  old_prob
+                    
+                    # Calculate probability of this specific path
+                    prob = math.log(dist[new_index]) +  old_prob 
                     temp_stack.add((new_path, new_note_positions, prob))
                     if len(temp_stack) >= window:
                         break
@@ -285,7 +289,8 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
                 for item in temp_stack:
                     stack.add(item)
-                    
+
+            # Find most probable path of all generated distributions
             count = 0
             for path, note_positions, prob in sorted(list(stack), key=lambda x:x[2], reverse=True):
                 if note_positions[-1] >= max_nr_words:
@@ -310,7 +315,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
             break
                         
     # 5. Determine and return output        
-    path, note_positions, score = max(accepted_lyrics, key=lambda x:x[2]) # Is this where we should sample?
+    path, note_positions, score = max(accepted_lyrics, key=lambda x:x[2]) # Pick most probable path in beam search
     generated = [idx2word[str(idx)] for idx in path[1::]]
                    
     return generated, note_positions, score
@@ -442,8 +447,9 @@ def main(args):
                                             seed=args.seed, window=args.window, 
                                             temperature=args.temperature, LM_model = args.LM_model)
 
-    model_name = args.model.split('.')[0]
-    np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
+    np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
+    model_name = args.LM_model.split('.')[0]
+    np.save('c-LSTM-LM/test_output/genearated_' + model_name, generated_lyrics)
     # generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
     save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
@@ -457,13 +463,13 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_15052020_1300/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_15052020_1300/", type=str, help="Checkpoint file path")
+    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_18052020_1600/model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_18052020_1600/", type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
     parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
     parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
-    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_14.pt", type=str, help="Model number of checkpoint")
+    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_21.pt", type=str, help="Model number of checkpoint")
     args = parser.parse_args()
     main(args)

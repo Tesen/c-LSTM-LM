@@ -233,8 +233,10 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_mod
             dists = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()
             stack = set()
             for y in range(len(prob_forward[t-1])):
-                dist = dists[y]
+                dist = dists[y] # Generated probability distribution
                 dist[word2idx["<unk>"]] = 0.0
+                
+                # Create path for this generated distribution
                 old_path = prob_forward[t-1][y][0]
 
                 if old_path[-1] in (bb, bl):
@@ -262,6 +264,8 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_mod
                     new_word = idx2word[str(new_index)]
                     new_path = old_path + (new_index, )
                     new_note_positions = old_note_positions + (update_note_position(notes, old_note_positions[-1], new_word), )
+                    
+                    # Calculate probability of this specific path
                     prob = math.log(dist[new_index]) +  old_prob
                     temp_stack.add((new_path, new_note_positions, prob))
                     if len(temp_stack) >= window:
@@ -286,7 +290,8 @@ def generate(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_mod
 
                 for item in temp_stack:
                     stack.add(item)
-                    
+
+            # Find most probable path of all generated distributions       
             count = 0
             for path, note_positions, prob in sorted(list(stack), key=lambda x:x[2], reverse=True):
                 if note_positions[-1] >= max_nr_words:
