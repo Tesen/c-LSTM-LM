@@ -50,7 +50,7 @@ def get_correct_length(length):
         return 32.0
 
 class SongLyricDataset(data.Dataset):
-    def __init__(self, data, word_size, window):
+    def __init__(self, data, word_size, window, limit_data):
         """ Create feature vocab and index dictionaries """
         # Create feature vocabulary
         for i in range(window):
@@ -72,14 +72,13 @@ class SongLyricDataset(data.Dataset):
         """ Load data and create word and syllable vocab """
         # Load data
         subfolders = os.listdir(data)
-        # subfolders = subfolders[0:10] # Limit data for test
+        if limit_data:
+            subfolders = subfolders[0:5] # Limit data for test
 
         # Initialize word occurance dictionary
         word_dict = defaultdict(int)
         syll_dict = defaultdict(int)
         
-        # Limit number of songs for testing
-        subfolders = subfolders[0:2] 
 
         # For each song
         print("Loading data and creating word and syllable vocabularies.")
@@ -105,9 +104,14 @@ class SongLyricDataset(data.Dataset):
                     # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
                     word_idx = note[1]
                     if word_idx != old_word_idx:
-                        word_lower = note[4].lower()
-                        word_dict[word_lower] += 1
-                        syll_dict[word_lower] += len(note[6])
+                        if type(note[6]) == list:
+                            word_lower = note[4].lower()
+                            syll_lower = [s.lower() for s in note[6]]
+                            word = "%s|%s"%(word_lower, "_".join(syll_lower))
+                            syl_len = len(note[6]) + 1
+                            word_dict[word] += 1
+                            syll_dict[word] += len(note[6])
+                    old_word_idx = word_idx
             skipcnt = skipcnt + skipperi            
             print("Number of corrupted files in subfolder: %s"%skipperi)
         print("Total number of corrupted files = %s"%skipcnt)
@@ -133,7 +137,7 @@ class SongLyricDataset(data.Dataset):
         for word, freq in sorted(word_dict.items(), key=lambda x:x[1], reverse=True)[:word_size:]: # Sort word_dict after frequency and limit size to word_size (size of our dictionary)
             # Add number of syllables for each word, calculate average number of syllables per word and average
             avg_syl = np.round(syll_dict[word]/freq)
-            syllables.add(avg_syl)
+            syllables.add(len(word.split('|')[-1].split('_')))
             self.word2syllables[word] = avg_syl
             # Build word/index dictionaries
             self.word2idx[word] = idx
@@ -193,24 +197,110 @@ class SongLyricDataset(data.Dataset):
 
                     word_idx = note[1]
                     if word_idx != old_word_idx:
-                        # This defines and lists the window for previous and upcoming notes
-                        prev_i = i - window + 1
-                        if prev_i < 0: 
-                            prev_i = 0
-                        prev_notes = notes[prev_i:i]
+                        if type(note[6]) == list:
+                            word_lower = note[4].lower()
+                            syll_lower = [s.lower() for s in note[6]]
+                            word = "%s|%s"%(word_lower, "_".join(syll_lower))
 
-                        next_i = i + window
-                        if next_i > len(notes):
-                            next_i = len(notes)
-                        next_notes = notes[i:next_i]
+                            # This defines and lists the window for previous and upcoming notes
+                            prev_i = i - window + 1
+                            if prev_i < 0: 
+                                prev_i = 0
+                            prev_notes = notes[prev_i:i]
 
-                        # If feature type is BB
-                        if feature_type == "<BB>":
-                            feature = [] # Initiatie the feature vector which is to contain the 
+                            next_i = i + window
+                            if next_i > len(notes):
+                                next_i = len(notes)
+                            next_notes = notes[i:next_i]
 
-                            w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
+                            # If feature type is BB
+                            if feature_type == "<BB>":
+                                feature = [] # Initiatie the feature vector which is to contain the 
+
+                                w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
+                                lyrics.append(w_idx) # Append lyric array with feature index
+                                syllables.append(1) # Append syllable array with 1
+
+                                prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                                feature.append(prev_tag)
+
+                                # For previous 8 notes in window
+                                for j, prev_note in enumerate(prev_notes):
+                                    if prev_note[2] == 'rest':
+                                        note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
+                                    else:
+                                        note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
+                                    
+                                    note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
+                                    
+                                    feature.append(note_num)
+                                    feature.append(note_duration)
+
+
+                                # For upcoming 8 notes in the window
+                                for j, next_note in enumerate(next_notes):
+                                    if next_note[2] == 'rest':
+                                        note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
+                                    else:
+                                        note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
+
+                                    note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
+
+                                    feature.append(note_num)
+                                    feature.append(note_duration)
+
+                                # Pad feature vector (add elements to fill the array)
+                                feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+
+                                # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
+                                melody.append(feature[::])
+                                tag_stack.append("<BB>")
+                            elif feature_type == "<BL>":
+                                feature = [] # Initiatie the feature vector which is to contain the 
+
+                                w_idx = self.word2idx.get("<BL>|<null>") # Get word index of BB feature
+                                lyrics.append(w_idx) # Append lyric array with feature
+                                syllables.append(1) # Append syllable array with 1
+
+                                prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
+                                feature.append(prev_tag)
+
+                                # For previous 8 notes in window
+                                for j, prev_note in enumerate(prev_notes):
+                                    if prev_note[2] == 'rest':
+                                        note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
+                                    else:
+                                        note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
+                                    
+                                    note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
+                                    
+                                    feature.append(note_num)
+                                    feature.append(note_duration)
+
+
+                                # For upcoming 8 notes in the window
+                                for j, next_note in enumerate(next_notes):
+                                    if next_note[2] == 'rest':
+                                        note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
+                                    else:
+                                        note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
+
+                                    note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
+
+                                    feature.append(note_num)
+                                    feature.append(note_duration)
+
+                                # Pad feature vector (add elements to fill the array)
+                                feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
+
+                                # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
+                                melody.append(feature[::])
+                                tag_stack.append("<BL>")                        
+
+                            feature = []
+                            w_idx = self.word2idx.get(word, self.word2idx["<unk>"])
                             lyrics.append(w_idx) # Append lyric array with feature index
-                            syllables.append(1) # Append syllable array with 1
+                            syllables.append(syl_len) # Append syllable array with number of syllalbes NOTE: Maybe this should be (len(note[6]) + 1)
 
                             prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
                             feature.append(prev_tag)
@@ -227,7 +317,6 @@ class SongLyricDataset(data.Dataset):
                                 feature.append(note_num)
                                 feature.append(note_duration)
 
-
                             # For upcoming 8 notes in the window
                             for j, next_note in enumerate(next_notes):
                                 if next_note[2] == 'rest':
@@ -242,91 +331,9 @@ class SongLyricDataset(data.Dataset):
 
                             # Pad feature vector (add elements to fill the array)
                             feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
-
-                            # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
                             melody.append(feature[::])
-                            tag_stack.append("<BB>")
-
-                        if feature_type == "<BL>":
-                            feature = [] # Initiatie the feature vector which is to contain the 
-
-                            w_idx = self.word2idx.get("<BL>|<null>") # Get word index of BB feature
-                            lyrics.append(w_idx) # Append lyric array with feature
-                            syllables.append(1) # Append syllable array with 1
-
-                            prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
-                            feature.append(prev_tag)
-
-                            # For previous 8 notes in window
-                            for j, prev_note in enumerate(prev_notes):
-                                if prev_note[2] == 'rest':
-                                    note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
-                                else:
-                                    note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
-                                
-                                note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
-                                
-                                feature.append(note_num)
-                                feature.append(note_duration)
-
-
-                            # For upcoming 8 notes in the window
-                            for j, next_note in enumerate(next_notes):
-                                if next_note[2] == 'rest':
-                                    note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
-                                else:
-                                    note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
-
-                                note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
-
-                                feature.append(note_num)
-                                feature.append(note_duration)
-
-                            # Pad feature vector (add elements to fill the array)
-                            feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
-
-                            # The feature vector is built up as indexes of ['prev_tag', 'note_num', 'note_duration', 'note_num', 'note_duration', ..., 'next_tag', 'note_num', 'note_duration, ...]
-                            melody.append(feature[::])
-                            tag_stack.append("<BL>")                        
-
-                        feature = []
-                        w_idx = self.word2idx.get(note[4], self.word2idx["<unk>"])
-                        lyrics.append(w_idx) # Append lyric array with feature index
-                        syllables.append(len(note[6])) # Append sylable array with number of syllalbes
-
-                        prev_tag = self.feature2idx["prev_tag=%s"%tag_stack[-1]]
-                        feature.append(prev_tag)
-
-                        # For previous 8 notes in window
-                        for j, prev_note in enumerate(prev_notes):
-                            if prev_note[2] == 'rest':
-                                note_num = self.feature2idx["note[-%s]=rest"%(len(prev_notes)-j)]
-                            else:
-                                note_num = self.feature2idx["note[-%s]=note"%(len(prev_notes)-j)]
-                            
-                            note_duration = self.feature2idx["length[-%s]=%s"%((len(prev_notes)-j), get_correct_length(prev_note[3]))]
-                            
-                            feature.append(note_num)
-                            feature.append(note_duration)
-
-                        # For upcoming 8 notes in the window
-                        for j, next_note in enumerate(next_notes):
-                            if next_note[2] == 'rest':
-                                note_num = self.feature2idx["note[%s]=rest"%(len(next_note)-j)]
-                            else:
-                                note_num = self.feature2idx["note[%s]=note"%(len(next_note)-j)]
-
-                            note_duration = self.feature2idx["length[%s]=%s"%(len(next_note)-j, get_correct_length(next_note[3]))]
-
-                            feature.append(note_num)
-                            feature.append(note_duration)
-
-                        # Pad feature vector (add elements to fill the array)
-                        feature = [feature[0]]*(39 - len(feature)) + feature # (adds the first element several times if its shorter than 39)
-                        melody.append(feature[::])
-                        tag_stack.append("<WORD>")
-
-                old_word_idx = word_idx
+                            tag_stack.append("<WORD>")
+                    old_word_idx = word_idx
                 
                 # Append syllable, lyric and melody object array with arrays
                 self.idx2syllable.append(syllables[::]) 
@@ -346,10 +353,7 @@ class SongLyricDataset(data.Dataset):
 
 def collate_fn(data):
     data.sort(key=lambda x: len(x[1]), reverse=True)
-    # print("len(data) = %s"%len(data))
     _syllables, _lyrics, _melody, feature_size = zip(*data)
-
-    # print("len(_melody) = %s"%len(_melody))
 
     lengths = [len(_lyric) for _lyric in _lyrics] # Creates an array of the lengths of each songs lyrics
     max_length = lengths[0]
@@ -362,9 +366,6 @@ def collate_fn(data):
         end = lengths[i]
         lyrics[i, :end] = _lyric[:end] # Create one long tensor for all songs
         syllables[i, :end] = _syllables[i][:end] # Create one long tensor for all songs
-        # print("_MELODY[i]: ", _melody[i])
-        # print("len(_MELODY[i]: ", len(_melody[i]))
-        # print("Tensor size: ", torch.Tensor(_melody[i]).long().size())
         melody[i, :end].scatter_(1, torch.Tensor(_melody[i]).long(), 1) 
 
     lengths = torch.Tensor(lengths).long()

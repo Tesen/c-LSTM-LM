@@ -45,6 +45,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
     # Load feature dict
     idx2feature = json.loads(open(checkpoint + "model.feature.json", "r").readline())
+    print("idx2feature: ", idx2feature)
     feature2idx = dict([(v, int(k)) for k, v in idx2feature.items()]) # Reverse idx2feature
     feature_size = len(feature2idx)
 
@@ -74,7 +75,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                 note_num = "note[-%s]=rest"%(len(prev_notes)-j)
             else:
                 note_num = "note[-%s]=note"%(len(prev_notes)-j)
-            note_duration = "length[-%s]=%s"%(len(prev_notes)-j, pn[1])
+            note_duration = "length[-%s]=%s"%(len(prev_notes)-j, float(pn[1]))
             feature_str.append(note_num)
             feature_str.append(note_duration)
         for j, nn in enumerate(next_notes):
@@ -82,12 +83,13 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                 note_num = "note[%s]=rest"%j
             else:
                 note_num = "note[%s]=note"%j
-            note_duration = "length[%s]=%s"%(j, nn[1])
+            note_duration = "length[%s]=%s"%(j, float(nn[1]))
             feature_str.append(note_num)
             feature_str.append(note_duration)
         feature = [feature2idx[f] for f in feature_str]
         return feature
 
+    """ Define function to update note position """
     def update_note_position(notes, note_position, word):
         """
         - Move notes for the syllable count of the generated word.
@@ -127,8 +129,8 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
     max_nr_words = len(notes) - 1
     prob_forward = [[] for l in range(max_nr_words)]
 
-    for t in range(max_nr_words):
-        if t == 0: # If first word
+    for t in range(max_nr_words): # For each note
+        if t == 0: # If first note
             old_path = (word2idx["<BB>|<null>"], )
             old_note_positions = (0, )
             old_generated = dict(zip(old_note_positions, old_path))
@@ -180,11 +182,12 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
             
             for new in stack:
                 prob_forward[t].append(new)
-        else:
+        else: # Not first note
             # Initiate matrices
             x_word = np.zeros((window, t+1), dtype="int32")
             x_midi = np.zeros((window, t+1, feature_size))
 
+            # For each probability sequence
             for y, (old_path, old_note_positions, old_prob) in enumerate(prob_forward[t-1]):
                 # 1. Create word input vector
                 for old_t, old_index in enumerate(old_path):
@@ -198,6 +201,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                 else:
                     prev_tag = "<WORD>"
 
+                # For each previous note
                 for old_t, old_midi_position in enumerate(old_note_positions):
                     i = old_midi_position
 
@@ -229,10 +233,12 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
             # We only want the last output
             lyrics_output = lyrics_output[-window::]
+
+            # Apply softmax to output
             dists = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()
             stack = set()
             for y in range(len(prob_forward[t-1])):
-                dist = dists[y] # Generated probability distribution
+                dist = dists[y] # Generated probability distributions
                 dist[word2idx["<unk>"]] = 0.0
 
                 # Create path for this generated distribution
@@ -293,10 +299,10 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
             # Find most probable path of all generated distributions
             count = 0
             for path, note_positions, prob in sorted(list(stack), key=lambda x:x[2], reverse=True):
-                if note_positions[-1] >= max_nr_words:
+                if note_positions[-1] >= max_nr_words: # If last note
                     entropy = -prob/(len(path) - 1)
                     accepted_lyrics.append((path, note_positions, entropy))
-                elif note_positions[-1] < max_nr_words:
+                elif note_positions[-1] < max_nr_words: # If not last note
                     prob_forward[t].append((path, note_positions, prob))
                     count += 1
                 if count >= window:
@@ -310,7 +316,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                     
                 
         # 4. Break
-        if len(accepted_lyrics) >= 10:
+        if len(accepted_lyrics) >= 10: # Only create 10 probability sequences in beam search, prune the rest
             sys.stderr.write("\n")
             break
                         
@@ -324,6 +330,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 def save_lyrics(generated, notes, output_dir, checkpoint):
     
     out_file = open(output_dir + 'output.txt', 'w')
+    lyrics_file = open(output_dir + 'lyrics.txt', 'w')
 
     # Load syllable countss
     word2syllablecnt = json.loads(open(checkpoint + "model.syllables.json", 'r').readline())
@@ -340,20 +347,19 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
     temp_syllcnt = 1
     # Save txt file
     for word in generated:
-        # if k == 0: # Skip first note
-            # continue
-
         if word.startswith("<BL>"):
             out_file.write(" ".join(line) + '\n') # Write line boundary
-            bbs.add(word_idx)
+            lyrics_file.write("".join(w for w in line) + '\n')
+            bls.add(word_idx)
             line = []
         elif word.startswith("<BB>"):
             out_file.write(" ".join(line) + '\n\n') # Write block boundary
+            lyrics_file.write("".join(w for w in line) + '\n\n')
             line = []
-            bls.add(word_idx)
+            bbs.add(word_idx)
         else:
             syllcnt = word2syllablecnt[word]
-            print("Syllcnt = ", (word, syllcnt))
+            # print("Syllcnt = ", (word, syllcnt))
             
             # if temp_syllcnt < syllcnt:
             #     temp_syllcnt += 1
@@ -361,16 +367,18 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
             #     line.append(word)
             #     word_idx += 1
             #     temp_syllcnt = 0
+            line.append(word)
 
             word_idx += 1
             words.append(word)
             word_vec.append([word, word_idx])
     
-    for (word, word_idx) in word_vec:
-        print("Word_vec: ", (word_idx, word))
+    # for (word, word_idx) in word_vec:
+    #     print("Word_vec: ", (word_idx, word))
 
     if len(line) > 0:
         out_file.write(" ".join(line) + '\n')
+        lyrics_file.write("".join(w for w in line) + '\n')
 
     # Save note feature array file
     song = {'lyrics': []}
@@ -441,16 +449,17 @@ def main(args):
     # save_notes = np.array(notes)
     np.save('c-LSTM-LM/test_output/notes.npy', notes)
 
-    with torch.no_grad():
-        generated_lyrics, positions, score = generate_deeper(notes=notes, 
-                                            param=args.param, checkpoint=args.checkpoint, 
-                                            seed=args.seed, window=args.window, 
-                                            temperature=args.temperature, LM_model = args.LM_model)
+    # with torch.no_grad():
+    #     generated_lyrics, positions, score = generate_deeper(notes=notes, 
+    #                                         param=args.param, checkpoint=args.checkpoint, 
+    #                                         seed=args.seed, window=args.window, 
+    #                                         temperature=args.temperature, LM_model = args.LM_model)
 
-    np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
-    model_name = args.LM_model.split('.')[0]
-    np.save('c-LSTM-LM/test_output/genearated_' + model_name, generated_lyrics)
-    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
+    # np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
+    # model_name = args.LM_model.split('.')[0]
+    # np.save('c-LSTM-LM/test_output/generated' + model_name, generated_lyrics)
+
+    generated_lyrics = np.load('c-LSTM-LM/test_output/generated_model_21.npy')
     save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
     
@@ -463,13 +472,14 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_18052020_1600/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_18052020_1600/", type=str, help="Checkpoint file path")
+    checkpoint = 'checkpoint_01062020_1400' + '/' # Change checkpoint folder
+    parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/" + checkpoint + "model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/" + checkpoint, type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
     parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
     parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
-    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_21.pt", type=str, help="Model number of checkpoint")
+    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_11.pt", type=str, help="Model number of checkpoint") # Change model number
     args = parser.parse_args()
     main(args)

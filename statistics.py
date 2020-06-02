@@ -48,14 +48,14 @@ def main(args):
     subfolders = os.listdir(args.data)
     list_of_song_nots = []
     song_notes = []
-    print(subfolders[73:74])
 
     # Load data
-    for subfolder in subfolders[70:71]:
+    for subfolder in subfolders[0:1]:
         print("Currently loading data from: " + subfolder)
         subfolder_path = os.path.join(args.data, subfolder)
         files = os.listdir(subfolder_path)
-        for file in files[0:5]:
+        for file in files[0:1]:
+            print("Song name: ", file.split('.')[0])
             try:
                 notes = np.load(os.path.join(subfolder_path, file), allow_pickle=True)
             except OSError as e:
@@ -69,7 +69,7 @@ def main(args):
             song_notes = []
     
     
-    notes = convert(args.midi)
+    # notes = convert(args.midi)
     # print(notes)
     
     notes = list_of_song_nots[0]
@@ -86,14 +86,15 @@ if __name__ == "__main__":
     """ Data parameter """
     parser.add_argument("-midi", "--midi", dest="midi", default="./c-LSTM-LM/sample_data/sample.midi", type=str, help="MIDI file")
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
-    parser.add_argument("-data", "--data", dest="data", default="./dataset_creation/augmented_dataset3_sorted", type=str, help="Data directory")
+    parser.add_argument("-data", "--data", dest="data", default="./dataset_creation/augmented_dataset4_sorted_test", type=str, help="Data directory")
 
     """ Model parameter """
     parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_12052020_1500/model.param.json", type=str, help="Parameter file path")
     parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_12052020_1500/", type=str, help="Checkpoint file path")
-
-    parser.add_argument("-deeper_param", "--deeper_param", dest="deeper_param", default="./c-LSTM-LM/checkpoint_15052020_1300/model.param.json", type=str, help="Parameter file path")
-    parser.add_argument("-deeper_checkpoint", "--deeper_checkpoint", dest="deeper_checkpoint", default="./c-LSTM-LM/checkpoint_15052020_1300/", type=str, help="Checkpoint file path")
+    
+    deeper_checkpoint = 'checkpoint_01062020_1400' + '/' # Change chekpoint folder
+    parser.add_argument("-deeper_param", "--deeper_param", dest="deeper_param", default="./c-LSTM-LM/" + deeper_checkpoint + "model.param.json", type=str, help="Parameter file path")
+    parser.add_argument("-deeper_checkpoint", "--deeper_checkpoint", dest="deeper_checkpoint", default="./c-LSTM-LM/" + deeper_checkpoint, type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
 
     parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_25.pt", type=str, help="Model number of checkpoint")
-    parser.add_argument("-deeper_LM_model", "--deeper_LM_model", dest="deeper_LM_model", default="model_15.pt", type=str, help="Model number of checkpoint")
+    parser.add_argument("-deeper_LM_model", "--deeper_LM_model", dest="deeper_LM_model", default="model_11.pt", type=str, help="Model number of checkpoint") # Change model
 
     args = parser.parse_args()
     main(args)

@@ -30,7 +30,7 @@ def main():
     random.seed(seed)
 
     """ Load data """
-    data_set = SongLyricDataset(data, word_size, window)
+    data_set = SongLyricDataset(data, word_size, window, limit_data)
     data_word_size = data_set.word_size
     data_feature_size = data_set.feature_size
     data_syllable_size = data_set.syllable_size
@@ -73,13 +73,18 @@ def main():
     """ Split data into training and validation data """
     n_samples = len(data_set)
     train_size = int(n_samples*train_rate)
-    validation_size = int((n_samples - train_size)/2)
+    validation_size = int((n_samples - train_size))
+
+    val_size = np.round(validation_size) - 1
+   
+    
     test_size = validation_size
+    test_data_set = 724
     
     train_data_set, val_data_set = torch.utils.data.random_split(data_set, [train_size, validation_size])
 
     print("Training set: ", len(train_data_set), " songs, Validation set: ", len(val_data_set), " songs, "
-          "Test set: ", len(test_data_set), " songs.")
+          "Test set: ", (test_data_set), " songs.")
 
     """ Create PyTorch dataloaders """
     train_data_loader = torch.utils.data.DataLoader(dataset=train_data_set,
@@ -302,35 +307,26 @@ def main():
                 save_model(epoch)
         epoch_cnt += 1
 
-        # Plot training loss
-        plt.figure('train', (6, 3))
+        # Plot losses
+        plt.figure('Loss plot')
         plt.subplot(1, 2, 1)
-        plt.title('Training lyric loss')
-        plt.ylabel('Train lyric loss')
+        plt.plot(train_lyric_loss_vec, 'g', label='Training loss')
+        plt.plot(val_lyric_loss_vec, 'b', label='Validation loss')
+        plt.title('Lyric loss')
+        plt.ylabel('Loss')
         plt.xlabel('Epoch')
-        plt.plot(train_lyric_loss_vec)
-        plt.subplot(1, 2, 2)
-        plt.title('Training syllable loss')
-        plt.ylabel('Train syllable loss')
-        plt.xlabel('Epoch')
-        plt.plot(train_syll_loss_vec)
-        plt.show()
-        plt.savefig('training_loss.png')
+        plt.legend()
 
-        # Plot validation loss
-        plt.figure('validation', (6, 3))
-        plt.subplot(1, 2, 1)
-        plt.title('Validation lyric loss')
-        plt.ylabel('Validation lyric loss')
-        plt.xlabel('Epoch')
-        plt.plot(val_lyric_loss_vec)
         plt.subplot(1, 2, 2)
-        plt.title('Validation syllable loss')
-        plt.ylabel('Validation syllable loss')
+        plt.plot(train_syll_loss_vec, 'g', label='Training loss')
+        plt.plot(val_syll_loss_vec, 'b', label='Validation loss')
+        plt.title('Syllable loss')
         plt.xlabel('Epoch')
-        plt.plot(val_syll_loss_vec)
-        plt.show()
-        plt.savefig('validation_loss.png') 
+        plt.legend()
+        if epoch_cnt == num_epochs:
+            plt.savefig(checkpoint + 'loss_plt.png')
+        
+        plt.show() 
 
 
         lp.lprint("-----------", True)

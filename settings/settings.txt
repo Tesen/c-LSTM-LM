@@ -1,19 +1,20 @@
 {
-    "data": "./dataset_creation/augmented_dataset3_sorted",
-    "checkpoint": "./c-LSTM-LM/checkpoint_18052020_1600/",
+    "data": "./dataset_creation/augmented_dataset4_sorted",
+    "checkpoint": "./c-LSTM-LM/checkpoint_02062020_TEST/",
     "window": 10,
     "word_size": 20000,
     "word_dim": 512,
     "melody_dim": 256,
     "seed": 0,
     "num_workers": 4,
-    "num_epochs": 100,
+    "num_epochs": 5,
     "batch_size": 32,
     "lr": 0.001,
     "log_interval": 5,
-    "save_interval": 5,
+    "save_interval": 2,
     "train_rate": 0.9,
     "val_rate": 0.1,
     "test_rate": 0,
-    "num_layers": 3
+    "num_layers": 3,
+    "limit_data": true
 }
