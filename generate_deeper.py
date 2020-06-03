@@ -99,12 +99,13 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
         if word.startswith(("<BL>", "<BB>")):
             pass
         else:
-            try:
-                word_length = int(word2syllablecnt[word]) 
-            except KeyError:
-                print("\nKeyError for word: ", word)
-                word_length = 0
+            # try:
+            #     word_length = int(word2syllablecnt[word]) 
+            # except KeyError:
+            #     print("\nKeyError for word: ", word)
+            #     word_length = 0
 
+            word_length = int(len([s for s in word.split('|')[-1].split('_')]))
             if word_length != 0:
                 step = 0
                 width = 0
@@ -164,6 +165,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
             # 3. Generate word
             syllable_output, lyrics_output, hidden = model(x_word, x_midi, lengths + 1, hidden)
+            print("lyrics_output: ", lyrics_output)
 
             # Apply softmax layer to text output
             dist = nn.functional.softmax(lyrics_output, dim=1).cpu().numpy()[0]
@@ -301,7 +303,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
             for path, note_positions, prob in sorted(list(stack), key=lambda x:x[2], reverse=True):
                 if note_positions[-1] >= max_nr_words: # If last note
                     entropy = -prob/(len(path) - 1)
-                    accepted_lyrics.append((path, note_positions, entropy))
+                    accepted_lyrics.append((path, note_positions, entropy)) # Save complete lyrics
                 elif note_positions[-1] < max_nr_words: # If not last note
                     prob_forward[t].append((path, note_positions, prob))
                     count += 1

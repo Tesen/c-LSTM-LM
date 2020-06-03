@@ -83,6 +83,8 @@ class SongLyricDataset(data.Dataset):
         # For each song
         print("Loading data and creating word and syllable vocabularies.")
         skipcnt = 0
+        songskipcnt = 0
+        songs_skipped = []
         for subfolder in subfolders:
             print("Currently loading data from: " + subfolder)
             subfolder_path = os.path.join(data, subfolder)
@@ -94,6 +96,12 @@ class SongLyricDataset(data.Dataset):
                 except OSError as e:
                     print("File %s could not be loaded. Skips file."%file)
                     skipperi += 1
+                    continue
+
+                # Skip too short songs
+                if len(notes) <= 4:
+                    songskipcnt += 1
+                    songs_skipped.append(file)
                     continue
 
                 old_word_idx = "<None>"
@@ -115,6 +123,7 @@ class SongLyricDataset(data.Dataset):
             skipcnt = skipcnt + skipperi            
             print("Number of corrupted files in subfolder: %s"%skipperi)
         print("Total number of corrupted files = %s"%skipcnt)
+        print("Total number of skipped songs = ", songskipcnt)
 
         # Create index dictionaries for words
         self.word2idx = {}
@@ -164,13 +173,18 @@ class SongLyricDataset(data.Dataset):
             print("Currently loading data from: " + subfolder)
             
             files = os.listdir(subfolder_path)
-            for file in files:
+            for file in files: # For each song
                 try:
                     notes = np.load(os.path.join(subfolder_path, file), allow_pickle=True)
                 except OSError as e:
                     print("File %s could not be loaded. Skips file.")
                     skipcnt += 1
                     continue
+
+                # Skip too short songs
+                if len(notes) <= 4:
+                    continue
+
                 # Define starting state
                 old_word_idx = "<None>"
                 tag_stack = ["<WORD>"]
@@ -194,7 +208,6 @@ class SongLyricDataset(data.Dataset):
 
                 for i, note in enumerate(notes):
                     feature_type = note[7]
-
                     word_idx = note[1]
                     if word_idx != old_word_idx:
                         if type(note[6]) == list:
@@ -217,7 +230,7 @@ class SongLyricDataset(data.Dataset):
                             if feature_type == "<BB>":
                                 feature = [] # Initiatie the feature vector which is to contain the 
 
-                                w_idx = self.word2idx.get("<BB>|<null>") # Get word index of BB feature
+                                w_idx = self.word2idx.get("<BB>|<null>", self.word2idx["<unk>"]) # Get word index of BB feature
                                 lyrics.append(w_idx) # Append lyric array with feature index
                                 syllables.append(1) # Append syllable array with 1
 
@@ -258,7 +271,7 @@ class SongLyricDataset(data.Dataset):
                             elif feature_type == "<BL>":
                                 feature = [] # Initiatie the feature vector which is to contain the 
 
-                                w_idx = self.word2idx.get("<BL>|<null>") # Get word index of BB feature
+                                w_idx = self.word2idx.get("<BL>|<null>", self.word2idx["<unk>"]) # Get word index of BB feature
                                 lyrics.append(w_idx) # Append lyric array with feature
                                 syllables.append(1) # Append syllable array with 1
 
@@ -299,6 +312,7 @@ class SongLyricDataset(data.Dataset):
 
                             feature = []
                             w_idx = self.word2idx.get(word, self.word2idx["<unk>"])
+                            
                             lyrics.append(w_idx) # Append lyric array with feature index
                             syllables.append(syl_len) # Append syllable array with number of syllalbes NOTE: Maybe this should be (len(note[6]) + 1)
 
@@ -334,7 +348,7 @@ class SongLyricDataset(data.Dataset):
                             melody.append(feature[::])
                             tag_stack.append("<WORD>")
                     old_word_idx = word_idx
-                
+                # print("Lyric: ", file, len(lyrics))
                 # Append syllable, lyric and melody object array with arrays
                 self.idx2syllable.append(syllables[::]) 
                 self.idx2lyrics.append(lyrics[::])
@@ -347,14 +361,19 @@ class SongLyricDataset(data.Dataset):
         syllables = torch.Tensor(self.idx2syllable[idx])
         lyrics = torch.Tensor(self.idx2lyrics[idx])
         melody = self.idx2melody[idx]
+        # print("GET IT!!!")
+        # print("LYRIC SIZE: ", type(lyrics), lyrics.size())
 
         return syllables, lyrics, melody, self.feature_size
 
 
 def collate_fn(data):
     data.sort(key=lambda x: len(x[1]), reverse=True)
+    # print("len(data) = %s"%len(data))
     _syllables, _lyrics, _melody, feature_size = zip(*data)
 
+    # print("len(_melody) = %s"%len(_melody))
+    # print("lyric size: ", torch.Size(_lyrics))
     lengths = [len(_lyric) for _lyric in _lyrics] # Creates an array of the lengths of each songs lyrics
     max_length = lengths[0]
     
@@ -366,6 +385,9 @@ def collate_fn(data):
         end = lengths[i]
         lyrics[i, :end] = _lyric[:end] # Create one long tensor for all songs
         syllables[i, :end] = _syllables[i][:end] # Create one long tensor for all songs
+        # print("_MELODY[i]: ", _melody[i])
+        # print("len(_MELODY[i]: ", len(_melody[i]))
+        # print("Tensor size: ", torch.Tensor(_melody[i]).long().size())
         melody[i, :end].scatter_(1, torch.Tensor(_melody[i]).long(), 1) 
 
     lengths = torch.Tensor(lengths).long()

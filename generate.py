@@ -439,17 +439,17 @@ def main(args):
 
     notes = convert(args.midi)
     print("Notes: ", notes)
-    # with torch.no_grad():
-    #     generated_lyrics, positions, score = generate(notes=notes, 
-    #                                         param=args.param, checkpoint=args.checkpoint, 
-    #                                         seed=args.seed, window=args.window, 
-    #                                         temperature=args.temperature, LM_model = args.LM_model)
+    with torch.no_grad():
+        generated_lyrics, positions, score = generate(notes=notes, 
+                                            param=args.param, checkpoint=args.checkpoint, 
+                                            seed=args.seed, window=args.window, 
+                                            temperature=args.temperature, LM_model = args.LM_model)
 
-    # save_generate = np.array(generated_lyrics)
-    # model_name = args.LM_model.split('.')[0]
-    # np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
-    generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
-    save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
+    save_generate = np.array(generated_lyrics)
+    model_name = args.LM_model.split('.')[0]
+    np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
+    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated.lyrics.npy')
+    # save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
     
 

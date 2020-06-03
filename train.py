@@ -111,15 +111,6 @@ def main():
     # Calculate number of parameters in model
     utils.model_summary(model)
 
-    pp=0
-    for p in list(model.parameters()):
-        nno=1
-        for s in list(p.size()):
-            nno = nno*s
-        pp += nno
-    print("Number of parameters: ", pp)
-
-
     """ Build Optimizers """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
     loss_criterion = nn.CrossEntropyLoss() # Combines LogSoftmax() and NLLLoss() (Negative log likelihood loss)
@@ -155,7 +146,7 @@ def main():
             lengths = lengths.to(device)
 
             """ Remove first melody feature """
-            melody = melody[:, 1:] # We dont really want to do this?
+            melody = melody[:, 1:]
 
             """ Reset gradient to zero """
             optimizer.zero_grad()
