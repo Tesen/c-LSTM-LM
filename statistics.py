@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/checkpoint_12052020_1500/model.param.json", type=str, help="Parameter file path")
     parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/checkpoint_12052020_1500/", type=str, help="Checkpoint file path")
     
-    deeper_checkpoint = 'checkpoint_01062020_1400' + '/' # Change chekpoint folder
+    deeper_checkpoint = 'checkpoint_03062020_1030' + '/' # Change chekpoint folder
     parser.add_argument("-deeper_param", "--deeper_param", dest="deeper_param", default="./c-LSTM-LM/" + deeper_checkpoint + "model.param.json", type=str, help="Parameter file path")
     parser.add_argument("-deeper_checkpoint", "--deeper_checkpoint", dest="deeper_checkpoint", default="./c-LSTM-LM/" + deeper_checkpoint, type=str, help="Checkpoint file path")
 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
 
     parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_25.pt", type=str, help="Model number of checkpoint")
-    parser.add_argument("-deeper_LM_model", "--deeper_LM_model", dest="deeper_LM_model", default="model_11.pt", type=str, help="Model number of checkpoint") # Change model
+    parser.add_argument("-deeper_LM_model", "--deeper_LM_model", dest="deeper_LM_model", default="model_06.pt", type=str, help="Model number of checkpoint") # Change model
 
     args = parser.parse_args()
     main(args)
