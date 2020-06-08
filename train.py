@@ -6,6 +6,7 @@ import json
 import random
 import time
 import numpy as np
+import math
 import utils
 import matplotlib.pyplot as plt
 # from data import SongLyricDataset, collate_fn
@@ -31,6 +32,7 @@ def main():
 
     """ Load data """
     data_set = SongLyricDataset(data, word_size, window, limit_data)
+    test_data_set = SongLyricDataset(data, word_size, window, limit_data)
     data_word_size = data_set.word_size
     data_feature_size = data_set.feature_size
     data_syllable_size = data_set.syllable_size
@@ -76,15 +78,13 @@ def main():
     validation_size = int((n_samples - train_size))
 
     val_size = np.round(validation_size) - 1
-   
-    
     test_size = validation_size
-    test_data_set = 724
+    test_data_set_size = 724
     
     train_data_set, val_data_set = torch.utils.data.random_split(data_set, [train_size, validation_size])
 
     print("Training set: ", len(train_data_set), " songs, Validation set: ", len(val_data_set), " songs, "
-          "Test set: ", (test_data_set), " songs.")
+          "Test set: ", (test_data_set_size), " songs.")
 
     """ Create PyTorch dataloaders """
     train_data_loader = torch.utils.data.DataLoader(dataset=train_data_set,
@@ -99,11 +99,11 @@ def main():
                                                   num_workers=num_workers, 
                                                   collate_fn=collate_fn)
 
-    # test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
-    #                                               batch_size=batch_size,
-    #                                               shuffle=True,
-    #                                               num_workers=num_workers, 
-    #                                               collate_fn=collate_fn)
+    test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
+                                                  batch_size=batch_size,
+                                                  shuffle=True,
+                                                  num_workers=num_workers, 
+                                                  collate_fn=collate_fn)
 
     """ Load CLLM model """
     model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=data_syllable_size, word_size=data_word_size, feature_size=data_feature_size, num_layers=num_layers).to(device)
@@ -193,7 +193,6 @@ def main():
                                   loss_l=sum_losses_lyric))
         return sum_losses_lyric.avg, sum_losses_syll.avg
 
-
     def validation(epoch, data_set, data_loader):
         model.eval()
 
@@ -262,13 +261,55 @@ def main():
                                   loss_l=sum_losses_lyric))
         return sum_losses_lyric.avg, sum_losses_syll.avg
 
+    def evaluation(test_data, test_data_loader):
+        model.eval()    
+        sum_losses_syll = utils.AverageMeter()
+        sum_losses_lyric = utils.AverageMeter()
 
-    def test(data_set, data_loader):
-        print("test")
+        """ Build Optimizers """
+        # lr = 0.001
+        # optimizer = torch.optim.Adam(model.parameters(), lr=lr) # lr = 0.001
+        loss_criterion = nn.CrossEntropyLoss() # Combines LogSoftmax() and NLLLoss() (Negative log likelihood loss)
+
+        hidden = model.init_hidden(batch_size)
+
+        for i, (syllable, lyric, melody, lengths) in enumerate(test_data_loader):
+            local_bs = lyric.size(0)
+            if local_bs != batch_size:
+                continue
+
+            """ Move dataloaders to GPU """
+            syllable = syllable.to(device)
+            lyric = lyric.to(device)
+            melody = melody.to(device).float()
+            lengths = lengths.to(device)
+
+            """ Remove first melody feature """
+            melody = melody[:, 1:] # We dont really want to do this?
+
+            """ Detach hidden layers """
+            hidden = utils.repackage_hidden(hidden) # Function from PyTorch NLP official example
+
+            """ Feedforward """
+            # Feedforward
+            syllable_output, lyrics_output, hidden = model(lyric[:, :-1], melody, lengths, hidden)
+            
+            # Define packed padded targets
+            target_syllable = pack_padded_sequence(syllable[:, 1:], lengths-1, batch_first=True)[0]
+            target_lyrics = pack_padded_sequence(lyric[:, 1:], lengths-1, batch_first=True)[0]
+            
+            # Calculate and update Cross-Entropy loss
+            loss_syllable = loss_criterion(syllable_output, target_syllable)
+            sum_losses_syll.update(loss_syllable)
+
+            loss_lyrics = loss_criterion(lyrics_output, target_lyrics)
+            sum_losses_lyric.update(loss_lyrics)
+        
+        return sum_losses_lyric, sum_losses_syll
 
     def save_model(epoch):
         model.eval()
-        with open(checkpoint+"model_%02d.pt"%(epoch+1), 'wb') as f:
+        with open(checkpoint+"model_%02d.pt"%(epoch), 'wb') as f:
             torch.save(model.state_dict(), f)
 
     """ Run Epochs """
@@ -278,6 +319,7 @@ def main():
     train_syll_loss_vec = []
     val_lyric_loss_vec = []
     val_syll_loss_vec = []
+    best_val_loss = None
     epoch_cnt = 0
     for epoch in range(num_epochs):
         # Training 
@@ -295,7 +337,14 @@ def main():
 
             # Save checkpoint
             if epoch_cnt%save_interval == 0:
-                save_model(epoch)
+                save_model(epoch+1)
+
+            if not best_val_loss or val_lyric_loss < best_val_loss:
+                save_model(1337)
+                best_val_loss = val_lyric_loss
+            # else:
+            #     # Anneal the learning rate if no improvement has been seen in the validation dataset
+            #     lr /= 4
         epoch_cnt += 1
 
         # Plot losses
@@ -321,6 +370,41 @@ def main():
 
 
         lp.lprint("-----------", True)
+
+    """ Load the best saved model """
+    with open(checkpoint+"model_%02d.pt"%1337, 'rb') as f:
+        cp = torch.load(f)
+    model.load_state_dict(cp)
+
+    """ Evaluate best model """
+    data_word_size = test_data_set.word_size
+    data_feature_size = test_data_set.feature_size
+    data_syllable_size = test_data_set.syllable_size
+    # Print data test stats
+    lp.lprint("------ Test Data Stats -----", True)
+    lp.lprint("{:>12}:  {}".format("Number of songs", len(test_data_set)), True)
+    lp.lprint("{:>12}:  {}".format("vocab size", data_word_size), True)
+    lp.lprint("{:>12}:  {}".format("feature size", data_feature_size), True)
+    lp.lprint("{:>12}:  {}".format("syllable size", data_syllable_size), True)
+
+    # Evaluate model
+    sum_losses_lyric, sum_losses_syll =  evaluation(test_data_set, test_data_loader)
+    ppl_lyric = math.exp(sum_losses_lyric.avg)
+    ppl_syll = math.exp(sum_losses_syll.avg)
+    print("ppl_lyric = ", ppl_lyric)
+    print("ppl_syll = ", ppl_syll)
+
+    lp.lprint('| Evaluation: '
+                          '| Test Loss(Syllable) {loss_s.avg:5.5f} |'
+                          '| Test Loss(Lyrics) {loss_l.avg:5.5f} |'
+                          '| Test PPL(Syllable) {ppl_s:5.5f} |'
+                          '| Test PPL(Lyrics) {ppl_l:5.5f} |' 
+                          .format(loss_s=sum_losses_syll, 
+                                  loss_l=sum_losses_lyric,
+                                  ppl_s=ppl_syll,
+                                  ppl_l=ppl_lyric))
+
+
     elapsed = (time.time() - first_start_time)/60
     print("Elapsed = ", elapsed)
     lp.lprint('Total elapsed time: {elapsed:7.2f} minutes'.format(elapsed=elapsed))
@@ -373,6 +457,7 @@ if __name__ == "__main__":
     log_interval = log_interval
     save_interval = save_interval
     num_layers = num_layers
+    limit_data = limit_data
     
 
 

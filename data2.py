@@ -73,7 +73,7 @@ class SongLyricDataset(data.Dataset):
         # Load data
         subfolders = os.listdir(data)
         if limit_data:
-            subfolders = subfolders[0:5] # Limit data for test
+            subfolders = subfolders[0:2] # Limit data for test
 
         # Initialize word occurance dictionary
         word_dict = defaultdict(int)

@@ -20,6 +20,33 @@ logging.disable(logging.FATAL)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+def get_correct_length(length):
+    length = int(length)
+    if length <= 0.25:
+        return 0.25
+    elif length <= 0.5:
+        return 0.5
+    elif length <= 0.75:
+        return 0.75
+    elif length <= 1:
+        return 1.0
+    elif length <= 1.5:
+        return 1.5
+    elif length <= 2:
+        return 2.0
+    elif length <= 3:
+        return 3.0
+    elif length <= 4:
+        return 4.0
+    elif length <= 6:
+        return 6.0
+    elif length <= 8:
+        return 8.0
+    elif length <= 16:
+        return 16.0
+    elif length <= 32:
+        return 32.0
+
 def sample(preds, temperature=1.0):
     # Helper function to sample an index from a probability array
     preds = np.asarray(preds).astype('float64')
@@ -29,7 +56,7 @@ def sample(preds, temperature=1.0):
     probas = np.random.multinomial(1, preds, 1)
     return np.argmax(probas)
 
-def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_model = ""):
+def generate_deeper1(notes, param, checkpoint, seed=0, window=2, temperature=1.0, LM_model = ""):
     """ Set the random seed manually for reproducibility """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -62,8 +89,11 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
 
     """ Load model """
     model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=3).to(device)
-    model.load_state_dict(torch.load(checkpoint + LM_model))
+    print("LOAD PATH: ", checkpoint + LM_model)
+    cp = torch.load(checkpoint + LM_model)
+    model.load_state_dict(cp)
     model.eval()
+    print('Model succesfully loaded!')
     hidden = model.init_hidden(1)
 
     """ Define feature function """
@@ -75,7 +105,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                 note_num = "note[-%s]=rest"%(len(prev_notes)-j)
             else:
                 note_num = "note[-%s]=note"%(len(prev_notes)-j)
-            note_duration = "length[-%s]=%s"%(len(prev_notes)-j, float(pn[1]))
+            note_duration = "length[-%s]=%s"%(len(prev_notes)-j, get_correct_length(float(pn[1])))
             feature_str.append(note_num)
             feature_str.append(note_duration)
         for j, nn in enumerate(next_notes):
@@ -83,7 +113,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                 note_num = "note[%s]=rest"%j
             else:
                 note_num = "note[%s]=note"%j
-            note_duration = "length[%s]=%s"%(j, float(nn[1]))
+            note_duration = "length[%s]=%s"%(j, get_correct_length(float(nn[1])))
             feature_str.append(note_num)
             feature_str.append(note_duration)
         feature = [feature2idx[f] for f in feature_str]
@@ -317,7 +347,7 @@ def generate_deeper(notes, param, checkpoint, seed=0, window=2, temperature=1.0,
                     
                 
         # 4. Break
-        if len(accepted_lyrics) >= 10: # Only create 10 probability sequences in beam search, prune the rest
+        if len(accepted_lyrics) >= 5: # Limit number of probability sequences in beam search, prune the rest
             sys.stderr.write("\n")
             break
                         
@@ -539,21 +569,18 @@ def main(args):
     # save_notes = np.array(notes)
     np.save('c-LSTM-LM/test_output/notes.npy', notes)
 
-    # with torch.no_grad():
-    #     generated_lyrics, positions, score = generate_deeper(notes=notes, 
-    #                                         param=args.param, checkpoint=args.checkpoint, 
-    #                                         seed=args.seed, window=args.window, 
-    #                                         temperature=args.temperature, LM_model = args.LM_model)
+    with torch.no_grad():
+        generated_lyrics, positions, score = generate_deeper1(notes=notes, 
+                                            param=args.param, checkpoint=args.checkpoint, 
+                                            seed=args.seed, window=args.window, 
+                                            temperature=args.temperature, LM_model = args.LM_model)
 
     # np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
     # model_name = args.LM_model.split('.')[0]
     # np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
 
-    generated_lyrics = np.load('c-LSTM-LM/test_output/generated_model_06.npy')
-    save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
-
-    
-
+    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated_model_06.npy')
+    # save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -562,14 +589,14 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    checkpoint = 'checkpoint_03062020_1030' + '/' # Change checkpoint folder
+    checkpoint = 'checkpoint_01062020_1400' + '/' # Change checkpoint folder
     parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/" + checkpoint + "model.param.json", type=str, help="Parameter file path")
     parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/" + checkpoint, type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
     parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
-    parser.add_argument("-temperature", "--temperature", dest="temperature", default=2.0, type=float, help="Word sampling temperature")
-    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_06.pt", type=str, help="Model number of checkpoint") # Change model number
+    parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
+    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="Kopia av model_07.pt", type=str, help="Model number of checkpoint") # Change model number
     args = parser.parse_args()
     main(args)
