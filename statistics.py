@@ -6,6 +6,7 @@ import argparse
 import random
 import math
 import numpy as np
+from sklearn.metrics import f1_score
 
 # import utils
 from midi_utils.convert_midi4generation import convert
@@ -24,7 +25,7 @@ from data2 import SongLyricDataset, collate_fn
 
 # from generate import generate, sample
 from generate_deeper import generate_deeper1, sample
-from generate_deeper import save_lyrics
+from generate_deeper import save_lyrics, readable
 
 import logging
 logging.disable(logging.FATAL)
@@ -32,25 +33,14 @@ logging.disable(logging.FATAL)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Device type: %s"%device)
 
-def deeper(args, test_data, test_data_loader, batch_size, generate_lyrics=False, notes=None):
+def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, generate_lyrics=False, notes=None):
     """ Set the random seed manually for reproducibility """
     seed = 0
+    temperature = args.temperature
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
-    # if generate_lyrics:
-    #     print("No dont generate")
-    #     with torch.no_grad():
-    #         generated_lyrics, positions, score = generate_deeper(notes=notes, 
-    #                                             param=args.deeper_param, checkpoint=args.deeper_checkpoint, 
-    #                                             seed=args.seed, window=args.window, 
-    #                                             temperature=args.temperature, LM_model = args.deeper_LM_model)
-    #     for i, word in enumerate(generated_lyrics):
-    #         print("word ", i, ": ", word)
-
-    #     save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
-    
     """ Load parameters """
     params = json.loads(open(args.deeper_param, "r").readline())
     melody_dim = params["melody_dim"]
@@ -66,7 +56,65 @@ def deeper(args, test_data, test_data_loader, batch_size, generate_lyrics=False,
     # Load word dict
     idx2word = json.loads(open(args.deeper_checkpoint + "model.vocab.json", "r").readline())
     word2idx = dict([(v, int(k)) for k, v in idx2word.items()]) # Reverse idx2word
-    word_size = len(word2idx)
+    word_size = len(word2idx)    
+
+    """ Generate Lyrics and Statistics """
+    if generate_lyrics:
+        # TODO: For each song in list_of_song_notes. Generate predicted output, print both, create feature arrays and conduct analysis
+        notes = list_of_song_notes[0]
+        song_notes = []
+
+        # Create boundary feature vector to calculate F1-score
+        original_boundary_features = []
+        print('Original lyrics: ')
+        for note in notes:
+            print(note)
+            song_notes.append((note[2], note[3]))
+            if note[-1] == '<BB>':
+                original_boundary_features.append(word2idx['<BB>|<null>'])
+            elif note[-1] == '<BL>':
+                original_boundary_features.append(word2idx['<BL>|<null>'])
+            else:
+                original_boundary_features.append(0)
+
+
+        # NOTE: Comment to not generate new lyrics and load old generated lyrics 
+        # with torch.no_grad():
+        #     generated_lyrics, positions, score = generate_deeper1(notes=song_notes, 
+        #                                         param=args.deeper_param, checkpoint=args.deeper_checkpoint, 
+        #                                         seed=args.seed, window=args.window, 
+        #                                         temperature=args.temperature, LM_model = args.deeper_LM_model)
+        # np.save('c-LSTM-LM/test_output/genearated_lyrics_stat', generated_lyrics)
+        generated_lyrics = np.load('c-LSTM-LM/test_output/genearated_lyrics_stat.npy')
+
+        pred_generated = readable(generated_lyrics, song_notes, args.checkpoint)
+        
+        # Create boundary feature vector to calculate F1-score
+        predicted_boundary_fetures = []
+        print('Generated lyrics: ')
+        for note in pred_generated:
+            print(note)
+            if note[-1] == '<BB>':
+                predicted_boundary_fetures.append(word2idx['<BB>|<null>'])
+            elif note[-1] == '<BL>':
+                predicted_boundary_fetures.append(word2idx['<BL>|<null>'])
+            else:
+                predicted_boundary_fetures.append(0)
+
+        """ Calculate F1 score """
+        f1 = f1_score(original_boundary_features, predicted_boundary_fetures, average=None)
+        f1_bb = f1[1]
+        f1_bl = f1[2]
+        f1_none = f1[0]
+        print('F1-score: ', f1)
+        print('f1_bb: ', f1_bb)
+        print('f1_bl: ', f1_bl)
+        print('f1_none: ', f1_none)
+        
+    
+
+    print('idx2word',idx2word)
+    print('feature2idx', feature2idx)
 
     """ Load model """
     model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=3).to(device)
@@ -77,8 +125,8 @@ def deeper(args, test_data, test_data_loader, batch_size, generate_lyrics=False,
     sum_losses_lyric, sum_losses_syll =  evaluate(model, test_data, test_data_loader, batch_size)
     ppl_lyric = math.exp(sum_losses_lyric.avg)
     ppl_syll = math.exp(sum_losses_syll.avg)
-    print("ppl_lyric = ", ppl_lyric)
-    print("ppl_syll = ", ppl_syll)
+
+   
 
     lp.lprint('| Evaluation: '
                           '| Test Loss(Syllable) {loss_s.avg:5.5f} |'
@@ -146,34 +194,30 @@ def evaluate(model, test_data, test_data_loader, batch_size):
     
     return sum_losses_lyric, sum_losses_syll
 
-
 def main():    
+
     subfolders = os.listdir(args.data)
     list_of_song_notes = []
     song_notes = []
 
     # Load data
-    # for subfolder in subfolders[0:1]:
-    #     print("Currently loading data from: " + subfolder)
-    #     subfolder_path = os.path.join(args.data, subfolder)
-    #     files = os.listdir(subfolder_path)
-    #     for file in files[4:5]:
-    #         print("Song name: ", file.split('.')[0])
-    #         try:
-    #             notes = np.load(os.path.join(subfolder_path, file), allow_pickle=True)
-    #         except OSError as e:
-    #             print("File %s could not be loaded. Skips file."%file)
-    #             continue
-            
-    #         for note in notes:
-    #             song_notes.append((note[2], note[3]))
-
-    #         list_of_song_notes.append(song_notes)
-    #         song_notes = []
+    for subfolder in subfolders[0:1]:
+        print("Currently loading data from: " + subfolder)
+        subfolder_path = os.path.join(args.data, subfolder)
+        files = os.listdir(subfolder_path)
+        for file in files[50:51]:
+            print("Song name: ", file.split('.')[0])
+            try:
+                notes = np.load(os.path.join(subfolder_path, file), allow_pickle=True)
+            except OSError as e:
+                print("File %s could not be loaded. Skips file."%file)
+                continue
+            print("Number of notes: ", len(notes))
+            list_of_song_notes.append(notes) 
 
     word_size = 512
     window = 10
-    limit_data = False
+    limit_data = True
     """ Load test data """
     test_data_set = SongLyricDataset(args.data, word_size, window, limit_data)
     data_word_size = test_data_set.word_size
@@ -196,14 +240,13 @@ def main():
     # notes = convert(args.midi)
     # print(notes)
     
-    # notes = list_of_song_nots[0]
+    # notes = list_of_song_notes[0]
     # print(notes)
     # normal(args, notes)
-    # test_data_set = None
-    # test_data_loader = None
 
+    generate_lyrics = True
     with torch.no_grad():
-        deeper(args, test_data_set, test_data_loader, batch_size,  generate_lyrics=False)
+        deeper(args, list_of_song_notes, test_data_set, test_data_loader, batch_size, generate_lyrics)
 
 parser = argparse.ArgumentParser()
 """ Data parameter """
@@ -222,7 +265,7 @@ parser.add_argument("-deeper_checkpoint", "--deeper_checkpoint", dest="deeper_ch
 """ Generation parameter """
 parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
 parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
-parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
+parser.add_argument("-temperature", "--temperature", dest="temperature", default=2.0, type=float, help="Word sampling temperature")
 
 parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_25.pt", type=str, help="Model number of checkpoint")
 parser.add_argument("-deeper_LM_model", "--deeper_LM_model", dest="deeper_LM_model", default="model_06.pt", type=str, help="Model number of checkpoint") # Change model

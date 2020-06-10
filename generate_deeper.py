@@ -347,7 +347,7 @@ def generate_deeper1(notes, param, checkpoint, seed=0, window=2, temperature=1.0
                     
                 
         # 4. Break
-        if len(accepted_lyrics) >= 5: # Limit number of probability sequences in beam search, prune the rest
+        if len(accepted_lyrics) >= 2: # Limit number of probability sequences in beam search, prune the rest
             sys.stderr.write("\n")
             break
                         
@@ -356,7 +356,6 @@ def generate_deeper1(notes, param, checkpoint, seed=0, window=2, temperature=1.0
     generated = [idx2word[str(idx)] for idx in path[1::]]
                    
     return generated, note_positions, score
-
 
 def save_lyrics_old(generated, notes, output_dir, checkpoint):
     
@@ -483,6 +482,7 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
     bl_idxs = set()
 
     for word in generated:
+        print(word)
         if word == '<BB>|<null>':
             lyrics_file.write(" ".join(w.split('|')[0] for w in line) + '\n\n')
             out_file.write(" ".join(line) + '\n\n')
@@ -539,11 +539,9 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
         print(note)
         if note[2] == 'rest':
             if i == 0 or i == last_note_idx:
-                print('FIRST OR LAST')
                 song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
             else:
                 if temp_lyrics[i-1][1] == temp_lyrics[i+1][1]: # If rest in word
-                    print('GET HERE???')
                     song['lyrics'].append(note[::] + [temp_lyrics[i+1][4]] + ['<None>'] + [temp_lyrics[i+1][-2::]])
                 else:
                     song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
@@ -555,7 +553,90 @@ def save_lyrics(generated, notes, output_dir, checkpoint):
     for note in song["lyrics"]:
         corpus_file.write(json.dumps(note, ensure_ascii=False) + "\n")
 
+def readable(generated, notes, checkpoint):
+    # Save word and lyrics file
+    # out_file = open(output_dir + 'output.txt', 'w')
+    # lyrics_file = open(output_dir + 'lyrics.txt', 'w')
 
+    line = []
+    syllables = []
+    syll_with_word = []
+    word_idx = 0
+    bb_idxs = set()
+    bb_idxs.add(0)
+    bl_idxs = set()
+
+    for word in generated:
+        if word == '<BB>|<null>':
+            # lyrics_file.write(" ".join(w.split('|')[0] for w in line) + '\n\n')
+            # out_file.write(" ".join(line) + '\n\n')
+            line = []
+            bb_idxs.add(word_idx)
+        elif word == '<BL>|<null>':
+            # lyrics_file.write(" ".join(w.split('|')[0] for w in line) + '\n')
+            # out_file.write(" ".join(line) + '\n')
+            line = []
+            bl_idxs.add(word_idx)
+        else:
+            line.append(word)
+            syllables += word.split('|')[-1].split('_')
+            syll_with_word += [(s, word_idx, word) for s in word.split('|')[-1].split('_')]
+            word_idx += 1
+
+    # if len(line) > 0:
+    #     lyrics_file.write(" ".join(w.split('|')[0] for w in line) + '\n')
+    #     out_file.write(" ".join(line) + '\n')
+
+    # Save note format file
+    song = {'lyrics':[]}
+    word_pos = 0
+    temp_lyrics = []
+
+    # note = [note_number, word_index, note_type, duration, word, syllable, feature_type]
+    # note[0] = note_number, note[1] = word_index, note[2] = note_type(rest) or MIDI_number, note[3] = duration 
+    # note[4] = word, note[5] = syllable, note[6] = [all syllables], note[7]= feature_type
+    # print('Notes: ', notes)
+    for note_idx, (num, length) in enumerate(notes):
+        length = int(float(length))
+        
+        if word_pos >= len(syllables):
+            break
+        if num == 'rest':
+            temp_lyrics.append([note_idx, '<None>', num, length])
+        else:
+            word_info = list(syll_with_word[word_pos])
+            word_syl = word_info[0]
+            word_idx = word_info[1]
+            word = word_info[2]
+
+            sylls = word.split('|')[-1].split('_')
+
+            if word_idx in bb_idxs:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, word_syl, sylls, '<BB>'])
+            elif word_idx in bl_idxs:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, word_syl, sylls, '<BL>'])
+            else:
+                temp_lyrics.append([note_idx, word_idx, num, length, word, word_syl, sylls, '<None>'])
+            word_pos += 1
+
+    last_note_idx = len(temp_lyrics) - 1
+    for i, note in enumerate(temp_lyrics):
+        if note[2] == 'rest':
+            if i == 0 or i == last_note_idx:
+                song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
+            else:
+                if temp_lyrics[i-1][1] == temp_lyrics[i+1][1]: # If rest in word
+                    song['lyrics'].append(note[::] + [temp_lyrics[i+1][4]] + ['<None>'] + [temp_lyrics[i+1][-2::]])
+                else:
+                    song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
+        else:
+            song['lyrics'].append(note)
+    
+    song['lyrics'].append([last_note_idx + 1, '<None>', 'rest', '32', '<None>', '<None>', '<None>', '<None>'])
+    # corpus_file = open(output_dir + 'output.readable', 'w')
+    # for note in song["lyrics"]:
+    #     corpus_file.write(json.dumps(note, ensure_ascii=False) + "\n")
+    return song['lyrics']
 
 
 def main(args):
@@ -575,12 +656,12 @@ def main(args):
                                             seed=args.seed, window=args.window, 
                                             temperature=args.temperature, LM_model = args.LM_model)
 
-    # np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
-    # model_name = args.LM_model.split('.')[0]
-    # np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
+    np.save('c-LSTM-LM/test_output/genearated_', generated_lyrics)
+    model_name = args.LM_model.split('.')[0]
+    np.save('c-LSTM-LM/test_output/generated_' + model_name, generated_lyrics)
 
-    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated_model_06.npy')
-    # save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
+    # generated_lyrics = np.load('c-LSTM-LM/test_output/generated_Kopia av model_07.npy')
+    save_lyrics(generated_lyrics, notes, args.output, args.checkpoint)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -589,14 +670,14 @@ if __name__ == "__main__":
     parser.add_argument("-output", "--output", dest="output", default="./c-LSTM-LM/test_output/", type=str, help="Output directory")
 
     """ Model parameter """
-    checkpoint = 'checkpoint_01062020_1400' + '/' # Change checkpoint folder
+    checkpoint = 'checkpoint_03062020_1030' + '/' # Change checkpoint folder
     parser.add_argument("-param", "--param", dest="param", default="./c-LSTM-LM/" + checkpoint + "model.param.json", type=str, help="Parameter file path")
     parser.add_argument("-checkpoint", "--checkpoint", dest="checkpoint", default="./c-LSTM-LM/" + checkpoint, type=str, help="Checkpoint file path")
 
     """ Generation parameter """
     parser.add_argument("-seed", "--seed", dest="seed", default=0, type=int, help="Seed number for random library")
     parser.add_argument("-window", "--window", dest="window", default=20, type=int, help="Window size for beam search")
-    parser.add_argument("-temperature", "--temperature", dest="temperature", default=1.0, type=float, help="Word sampling temperature")
-    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="Kopia av model_07.pt", type=str, help="Model number of checkpoint") # Change model number
+    parser.add_argument("-temperature", "--temperature", dest="temperature", default=3.0, type=float, help="Word sampling temperature")
+    parser.add_argument("-LM_model", "--LM_model", dest="LM_model", default="model_06.pt", type=str, help="Model number of checkpoint") # Change model number
     args = parser.parse_args()
     main(args)

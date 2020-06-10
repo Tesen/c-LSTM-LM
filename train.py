@@ -372,6 +372,12 @@ def main():
         lp.lprint("-----------", True)
 
     """ Load the best saved model """
+    try: 
+        torch.cuda.empty_cache() # Empty cache
+        print('Succesfully emptied cache')
+    except Exception:
+        print('Failed to empty cache')
+
     with open(checkpoint+"model_%02d.pt"%1337, 'rb') as f:
         cp = torch.load(f)
     model.load_state_dict(cp)
@@ -409,6 +415,23 @@ def main():
     print("Elapsed = ", elapsed)
     lp.lprint('Total elapsed time: {elapsed:7.2f} minutes'.format(elapsed=elapsed))
     torch.cuda.empty_cache()
+
+
+
+
+
+
+
+
+
+    # TODO: Try to fix test data loading error. Reset?
+
+
+
+
+
+
+
     
 
 
