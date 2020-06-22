@@ -6,7 +6,9 @@ import argparse
 import random
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
+from collections import Counter
 
 # import utils
 from midi_utils.convert_midi4generation import convert
@@ -60,61 +62,163 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
 
     """ Generate Lyrics and Statistics """
     if generate_lyrics:
-        # TODO: For each song in list_of_song_notes. Generate predicted output, print both, create feature arrays and conduct analysis
-        notes = list_of_song_notes[0]
-        song_notes = []
+        # For each song in list_of_song_notes. Generate predicted output, print both, create feature arrays and conduct analysis
+        og_syll_per_line = []
+        og_syll_per_block = []
+        gen_syll_per_line = []
+        gen_syll_per_block = []
+        f1_bbs = []
+        f1_bls = []
+        f1_nones = []
 
-        # Create boundary feature vector to calculate F1-score
-        original_boundary_features = []
-        print('Original lyrics: ')
-        for note in notes:
-            print(note)
-            song_notes.append((note[2], note[3]))
-            if note[-1] == '<BB>':
-                original_boundary_features.append(word2idx['<BB>|<null>'])
-            elif note[-1] == '<BL>':
-                original_boundary_features.append(word2idx['<BL>|<null>'])
-            else:
-                original_boundary_features.append(0)
+        for notes in list_of_song_notes:
+            song_notes = []
+
+            # Create boundary feature vector to calculate F1-score
+            original_boundary_features = []
+            bl_syllcnt = 0
+            bb_syllcnt = 0
+            boundary_word = 0
+            print('Original lyrics: ')
+            for note in notes:
+                print(note)
+                word_idx = note[1]
+                song_notes.append((note[2], note[3]))
+
+                # Calculate number of syllables per line and block
+                if note[2] != 'rest' and int(note[1]) > 0 and note[1] != boundary_word:
+                    if note[-1] == '<BB>':
+                        og_syll_per_block.append(bb_syllcnt)
+                        bb_syllcnt = 0
+                        
+                        og_syll_per_line.append(bl_syllcnt)
+                        bl_syllcnt = 0
+
+                        boundary_word = note[1]
+                    elif note[-1] == '<BL>':
+                        og_syll_per_line.append(bl_syllcnt)
+                        bl_syllcnt = 0
+                        boundary_word = note[1]
+
+                if note[2] != 'rest' and note[0]>0:
+                    bb_syllcnt += 1
+                    bl_syllcnt += 1
+
+                if note[-1] == '<BB>':
+                    original_boundary_features.append(word2idx['<BB>|<null>'])
+                elif note[-1] == '<BL>':
+                    original_boundary_features.append(word2idx['<BL>|<null>'])
+                else:
+                    original_boundary_features.append(0)
+                
+            og_syll_per_block.append(bb_syllcnt)
+            og_syll_per_line.append(bl_syllcnt)
+            print('og_syll_per_block: ', og_syll_per_block)
+            print('og_syll_per_line: ', og_syll_per_line)
 
 
-        # NOTE: Comment to not generate new lyrics and load old generated lyrics 
-        # with torch.no_grad():
-        #     generated_lyrics, positions, score = generate_deeper1(notes=song_notes, 
-        #                                         param=args.deeper_param, checkpoint=args.deeper_checkpoint, 
-        #                                         seed=args.seed, window=args.window, 
-        #                                         temperature=args.temperature, LM_model = args.deeper_LM_model)
-        # np.save('c-LSTM-LM/test_output/genearated_lyrics_stat', generated_lyrics)
-        generated_lyrics = np.load('c-LSTM-LM/test_output/genearated_lyrics_stat.npy')
+            # NOTE: Comment to not generate new lyrics and load old generated lyrics 
+            # with torch.no_grad():
+            #     generated_lyrics, positions, score = generate_deeper1(notes=song_notes, 
+            #                                         param=args.deeper_param, checkpoint=args.deeper_checkpoint, 
+            #                                         seed=args.seed, window=args.window, 
+            #                                         temperature=args.temperature, LM_model = args.deeper_LM_model)
+            # np.save('c-LSTM-LM/test_output/genearated_lyrics_stat', generated_lyrics)
+            generated_lyrics = np.load('c-LSTM-LM/test_output/genearated_lyrics_stat.npy')
 
-        pred_generated = readable(generated_lyrics, song_notes, args.checkpoint)
-        
-        # Create boundary feature vector to calculate F1-score
-        predicted_boundary_fetures = []
-        print('Generated lyrics: ')
-        for note in pred_generated:
-            print(note)
-            if note[-1] == '<BB>':
-                predicted_boundary_fetures.append(word2idx['<BB>|<null>'])
-            elif note[-1] == '<BL>':
-                predicted_boundary_fetures.append(word2idx['<BL>|<null>'])
-            else:
-                predicted_boundary_fetures.append(0)
+            pred_generated = readable(generated_lyrics, song_notes, args.checkpoint)
+            
+            # Create boundary feature vector to calculate F1-score
+            predicted_boundary_fetures = []
+            bb_syllcnt = 0
+            bl_syllcnt = 0
+            print('Generated lyrics: ')
+            for note in pred_generated:
+                print(note)
 
-        """ Calculate F1 score """
-        f1 = f1_score(original_boundary_features, predicted_boundary_fetures, average=None)
-        f1_bb = f1[1]
-        f1_bl = f1[2]
-        f1_none = f1[0]
-        print('F1-score: ', f1)
-        print('f1_bb: ', f1_bb)
-        print('f1_bl: ', f1_bl)
-        print('f1_none: ', f1_none)
-        
+                # Calculate number of syllables per line and block
+                if note[2] != 'rest' and int(note[1]) > 0 and note[1] != boundary_word: 
+                    if note[-1] == '<BB>':
+                        gen_syll_per_block.append(bb_syllcnt)
+                        bb_syllcnt = 0
+                        
+                        gen_syll_per_line.append(bl_syllcnt)
+                        bl_syllcnt = 0
+
+                        boundary_word = note[1]
+                    elif note[-1] == '<BL>':
+                        gen_syll_per_line.append(bl_syllcnt)
+                        bl_syllcnt = 0
+                        boundary_word = note[1]
+
+                if note[2] != 'rest' and note[0]>0:
+                    bb_syllcnt += 1
+                    bl_syllcnt += 1
+                
+                
+                if note[-1] == '<BB>':
+                    predicted_boundary_fetures.append(word2idx['<BB>|<null>'])
+                elif note[-1] == '<BL>':
+                    predicted_boundary_fetures.append(word2idx['<BL>|<null>'])
+                else:
+                    predicted_boundary_fetures.append(0)
+            
+            gen_syll_per_block.append(bb_syllcnt)
+            gen_syll_per_line.append(bl_syllcnt)
+            print('gen_syll_per_block: ', gen_syll_per_block)
+            print('gen_syll_per_line: ', gen_syll_per_line)
+
+
+            """ Calculate F1 score """
+            f1 = f1_score(original_boundary_features, predicted_boundary_fetures, average=None)
+            f1_bb = f1[1]
+            f1_bl = f1[2]
+            f1_none = f1[0]
+            f1_bbs.append(f1_bb)
+            f1_bls.append(f1_bl)
+            f1_nones.append(f1_none)
     
+    # Calculate, plot and save number of unique numbers in syll per line and block arrays
+    cnt_og_syll_per_block = Counter(og_syll_per_block)
+    key_og_syll_per_block = sorted(cnt_og_syll_per_block.keys())
+    val_og_syll_per_block = [cnt_og_syll_per_block[key] for key in key_og_syll_per_block]
 
-    print('idx2word',idx2word)
-    print('feature2idx', feature2idx)
+    cnt_og_syll_per_line = Counter(og_syll_per_block)
+    key_og_syll_per_line = sorted(cnt_og_syll_per_line.keys())
+    val_og_syll_per_line = [cnt_og_syll_per_block[key] for key in key_og_syll_per_line]   
+
+    cnt_gen_syll_per_block = Counter(gen_syll_per_block)
+    key_gen_syll_per_block = sorted(cnt_gen_syll_per_block.keys())
+    val_gen_syll_per_block = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_block]
+
+    cnt_gen_syll_per_line = Counter(gen_syll_per_block)
+    key_gen_syll_per_line = sorted(cnt_gen_syll_per_line.keys())
+    val_gen_syll_per_line = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_line]
+
+    plt.figure('Syll per block')
+    plt.plot(key_og_syll_per_block, val_og_syll_per_block, 'k', label='Test songs')
+    plt.plot(key_gen_syll_per_block, val_gen_syll_per_block, 'b', label='Generated songs')
+    plt.show()
+    plt.savefig(args.deeper_checkpoint + 'test/sylls_per_block.fig')
+
+    plt.figure('Syll per line')
+    plt.plot(key_og_syll_per_line, val_og_syll_per_line, 'k', label='Test songs')
+    plt.plot(key_gen_syll_per_line, val_gen_syll_per_line, 'b', label='Generated songs')
+    plt.show()
+    plt.savefig(args.deeper_checkpoint + 'test/sylls_per_line.fig')
+    
+    with open(args.deeper_checkpoint + 'test/og_syll_per_block.json', 'w') as f:
+        f.write(json.dumps(cnt_og_syll_per_block))
+    
+    with open(args.deeper_checkpoint + 'test/og_syll_per_line.json', 'w') as f:
+        f.write(json.dumps(cnt_og_syll_per_line))
+
+    with open(args.deeper_checkpoint + 'test/gen_syll_per_block.json', 'w') as f:
+        f.write(json.dumps(cnt_gen_syll_per_block))
+
+    with open(args.deeper_checkpoint + 'test/gen_syll_per_line.json', 'w') as f:
+        f.write(json.dumps(cnt_gen_syll_per_line))
+
 
     """ Load model """
     model = deepCLLM(word_dim=word_dim, melody_dim=melody_dim, syllable_size=syllable_size, word_size=word_size, feature_size=feature_size, num_layers=3).to(device)
@@ -124,9 +228,7 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
 
     sum_losses_lyric, sum_losses_syll =  evaluate(model, test_data, test_data_loader, batch_size)
     ppl_lyric = math.exp(sum_losses_lyric.avg)
-    ppl_syll = math.exp(sum_losses_syll.avg)
-
-   
+    ppl_syll = math.exp(sum_losses_syll.avg)   
 
     lp.lprint('| Evaluation: '
                           '| Test Loss(Syllable) {loss_s.avg:5.5f} |'
@@ -136,7 +238,18 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
                           .format(loss_s=sum_losses_syll, 
                                   loss_l=sum_losses_lyric,
                                   ppl_s=ppl_syll,
-                                  ppl_l=ppl_lyric))
+                                  ppl_l=ppl_lyric), True)
+
+    f1_bb = np.average(f1_bbs)
+    f1_bl = np.average(f1_bls)
+    f1_none = np.average(f1_none)
+    lp.lprint('| Eval: '
+                          '| F1-score (BB) {f1bb:5.5f} |'
+                          '| F1-score (BL) {f1bl:5.5f} |'
+                          '| F1-score (Word) {f1none:5.5f} |' 
+                          .format(f1bb=f1_bb, 
+                                  f1bl=f1_bl,
+                                  f1none=f1_none), True)
 
 def normal(args, notes):
     with torch.no_grad():
@@ -194,24 +307,24 @@ def evaluate(model, test_data, test_data_loader, batch_size):
     
     return sum_losses_lyric, sum_losses_syll
 
-def main():    
-
+def main():
     subfolders = os.listdir(args.data)
     list_of_song_notes = []
     song_notes = []
 
     # Load data
-    for subfolder in subfolders[0:1]:
+    for subfolder in subfolders[0:1]: # NOTE: Data is limited
         print("Currently loading data from: " + subfolder)
         subfolder_path = os.path.join(args.data, subfolder)
         files = os.listdir(subfolder_path)
-        for file in files[50:51]:
+        for file in files[50:51]: # NOTE: Data is limited
             print("Song name: ", file.split('.')[0])
             try:
                 notes = np.load(os.path.join(subfolder_path, file), allow_pickle=True)
             except OSError as e:
                 print("File %s could not be loaded. Skips file."%file)
                 continue
+
             print("Number of notes: ", len(notes))
             list_of_song_notes.append(notes) 
 
@@ -226,11 +339,11 @@ def main():
     
     # Print data stats
     lp.lprint("------ Test Data Stats -----", True)
-    lp.lprint("{:>12}:  {}".format("Number of songs", len(test_data_set)), True)
-    lp.lprint("{:>12}:  {}".format("vocab size", data_word_size), True)
-    lp.lprint("{:>12}:  {}".format("feature size", data_feature_size), True)
-    lp.lprint("{:>12}:  {}".format("syllable size", data_syllable_size), True)
-
+    lp.lprint("{:>15}:  {}".format("Number of songs", len(test_data_set)), True)
+    lp.lprint("{:>15}:  {}".format("vocab size", data_word_size), True)
+    lp.lprint("{:>15}:  {}".format("feature size", data_feature_size), True)
+    lp.lprint("{:>15}:  {}".format("syllable size", data_syllable_size), True)
+    lp.lprint("-----------", True)
     batch_size = 32
     test_data_loader = torch.utils.data.DataLoader(dataset=test_data_set,
                                                   batch_size=batch_size,
@@ -274,8 +387,8 @@ args = parser.parse_args()
 argparse_dict = vars(args)
 print("------ Parameters -----")
 for k, v in argparse_dict.items():
-    print("{:>16}:  {}".format(k, v))
-lp = LogPrint(args.deeper_checkpoint + 'test/log.txt', True)
+    print("{:>17}:  {}".format(k, v))
+lp = LogPrint(args.deeper_checkpoint + 'test/test.log', True)
 
 
 

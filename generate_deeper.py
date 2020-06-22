@@ -347,7 +347,9 @@ def generate_deeper1(notes, param, checkpoint, seed=0, window=2, temperature=1.0
                     
                 
         # 4. Break
-        if len(accepted_lyrics) >= 2: # Limit number of probability sequences in beam search, prune the rest
+        num_accepted = 5
+        # print(' len(accepted_lyrics): ', len(accepted_lyrics), '/', num_accepted)
+        if len(accepted_lyrics) >= num_accepted: # Limit number of probability sequences in beam search, prune the rest
             sys.stderr.write("\n")
             break
                         
@@ -631,11 +633,11 @@ def readable(generated, notes, checkpoint):
                     song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
         else:
             song['lyrics'].append(note)
-    
-    song['lyrics'].append([last_note_idx + 1, '<None>', 'rest', '32', '<None>', '<None>', '<None>', '<None>'])
-    # corpus_file = open(output_dir + 'output.readable', 'w')
-    # for note in song["lyrics"]:
-    #     corpus_file.write(json.dumps(note, ensure_ascii=False) + "\n")
+
+
+    if song['lyrics'][-1] != [last_note_idx, '<None>', 'rest', 32, '<None>', '<None>', '<None>', '<None>']:     
+        song['lyrics'].append([last_note_idx + 1, '<None>', 'rest', 32, '<None>', '<None>', '<None>', '<None>'])
+
     return song['lyrics']
 
 

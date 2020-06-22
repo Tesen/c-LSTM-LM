@@ -23,6 +23,7 @@ class AverageMeter(object):
 
 
 class LogPrint:
+    
     def __init__(self, file_path, err):
         self.file = open(file_path, "w", buffering=1)
         self.err = err
