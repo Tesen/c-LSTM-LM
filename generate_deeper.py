@@ -628,7 +628,7 @@ def readable(generated, notes, checkpoint):
                 song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
             else:
                 if temp_lyrics[i-1][1] == temp_lyrics[i+1][1]: # If rest in word
-                    song['lyrics'].append(note[::] + [temp_lyrics[i+1][4]] + ['<None>'] + [temp_lyrics[i+1][-2::]])
+                    song['lyrics'].append(note[::] + [temp_lyrics[i+1][4]] + ['<None>'] + temp_lyrics[i+1][-2::])
                 else:
                     song['lyrics'].append([note[0], '<None>', note[2], note[3], '<None>', '<None>', '<None>', '<None>'])
         else:

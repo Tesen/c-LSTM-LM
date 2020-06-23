@@ -7,6 +7,7 @@ import random
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from sklearn.metrics import f1_score
 from collections import Counter
 
@@ -35,6 +36,33 @@ logging.disable(logging.FATAL)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Device type: %s"%device)
 
+def get_correct_length(length):
+    length = int(length)
+    if length <= 0.25:
+        return 0.25
+    elif length <= 0.5:
+        return 0.5
+    elif length <= 0.75:
+        return 0.75
+    elif length <= 1:
+        return 1.0
+    elif length <= 1.5:
+        return 1.5
+    elif length <= 2:
+        return 2.0
+    elif length <= 3:
+        return 3.0
+    elif length <= 4:
+        return 4.0
+    elif length <= 6:
+        return 6.0
+    elif length <= 8:
+        return 8.0
+    elif length <= 16:
+        return 16.0
+    elif length <= 32:
+        return 32.0
+
 def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, generate_lyrics=False, notes=None):
     """ Set the random seed manually for reproducibility """
     seed = 0
@@ -61,8 +89,23 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
     word_size = len(word2idx)    
 
     """ Generate Lyrics and Statistics """
-    if generate_lyrics:
-        # For each song in list_of_song_notes. Generate predicted output, print both, create feature arrays and conduct analysis
+    if generate_lyrics:        
+        # TODO: Create dictionary for note/rest boundary correlations
+        note_types = ['note', 'rest']
+        tags = ['<BB>', '<BL>', '<None>', '<Word>']
+        lengths = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 3.5, 4.0, 6.0, 8.0, 16.0, 32.0]
+        feature_boundary_cnt = []
+        for note_type in note_types:
+            for length in lengths:
+                for tag in tags:
+                    feature_boundary_cnt.append('%s[%s]%s'%(note_type, length, tag))
+
+        og_feature_boundary_cnt = dict((f, 0) for f in feature_boundary_cnt)
+        gen_feature_boundary_cnt = dict((f, 0) for f in feature_boundary_cnt)
+        print(len(og_feature_boundary_cnt), og_feature_boundary_cnt)
+
+
+        # Initiate syll counter arrays
         og_syll_per_line = []
         og_syll_per_block = []
         gen_syll_per_line = []
@@ -71,6 +114,7 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
         f1_bls = []
         f1_nones = []
 
+        # For each song in list_of_song_notes. Generate predicted output, print both, create feature arrays and conduct analysis
         for notes in list_of_song_notes:
             song_notes = []
 
@@ -83,7 +127,19 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
             for note in notes:
                 print(note)
                 word_idx = note[1]
-                song_notes.append((note[2], note[3]))
+                song_notes.append((note[2], note[3])) # Create note vector
+
+                # Count note/rest boundary correlations dictionary
+                if note[0] > 0 and note[0] < len(notes): # Skip first and last note
+                    if note[2] == 'rest' and note[-2] != '<None>': # If rest witin word
+                        og_feature_boundary_cnt['%s[%s]%s'%('rest', get_correct_length(note[3]), '<None>')] += 1
+                    elif note[2] == 'rest' and note[-2] == '<None>': # If rest between words
+                        og_feature_boundary_cnt['%s[%s]%s'%('rest', get_correct_length(note[3]), '<Word>')] += 1
+                    elif note[-1] == '<None>': # If normal boundary
+                        og_feature_boundary_cnt['%s[%s]%s'%('note', get_correct_length(note[3]), '<Word>')] += 1
+                    else: # If BB or BL
+                        og_feature_boundary_cnt['%s[%s]%s'%('note', get_correct_length(note[3]), note[-1])] += 1
+
 
                 # Calculate number of syllables per line and block
                 if note[2] != 'rest' and int(note[1]) > 0 and note[1] != boundary_word:
@@ -134,7 +190,16 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
             bl_syllcnt = 0
             print('Generated lyrics: ')
             for note in pred_generated:
-                print(note)
+                # Count note/rest boundary correlations dictionary
+                if note[0] > 0 and note[0] < len(notes): # Skip first and last note
+                    if note[2] == 'rest' and note[-2] != '<None>': # If rest witin word
+                        gen_feature_boundary_cnt['%s[%s]%s'%('rest', get_correct_length(note[3]), '<None>')] += 1
+                    elif note[2] == 'rest' and note[-2] == '<None>': # If rest between words
+                        gen_feature_boundary_cnt['%s[%s]%s'%('rest', get_correct_length(note[3]), '<Word>')] += 1
+                    elif note[-1] == '<None>': # If normal boundary
+                        gen_feature_boundary_cnt['%s[%s]%s'%('note', get_correct_length(note[3]), '<Word>')] += 1
+                    else: # If BB or BL
+                        gen_feature_boundary_cnt['%s[%s]%s'%('note', get_correct_length(note[3]), note[-1])] += 1
 
                 # Calculate number of syllables per line and block
                 if note[2] != 'rest' and int(note[1]) > 0 and note[1] != boundary_word: 
@@ -179,45 +244,125 @@ def deeper(args, list_of_song_notes, test_data, test_data_loader, batch_size, ge
             f1_nones.append(f1_none)
     
     # Calculate, plot and save number of unique numbers in syll per line and block arrays
-    cnt_og_syll_per_block = Counter(og_syll_per_block)
-    key_og_syll_per_block = sorted(cnt_og_syll_per_block.keys())
-    val_og_syll_per_block = [cnt_og_syll_per_block[key] for key in key_og_syll_per_block]
+    def syll_dist_analysis():
+        cnt_og_syll_per_block = Counter(og_syll_per_block)
+        key_og_syll_per_block = sorted(cnt_og_syll_per_block.keys())
+        val_og_syll_per_block = [cnt_og_syll_per_block[key] for key in key_og_syll_per_block]
 
-    cnt_og_syll_per_line = Counter(og_syll_per_block)
-    key_og_syll_per_line = sorted(cnt_og_syll_per_line.keys())
-    val_og_syll_per_line = [cnt_og_syll_per_block[key] for key in key_og_syll_per_line]   
+        cnt_og_syll_per_line = Counter(og_syll_per_block)
+        key_og_syll_per_line = sorted(cnt_og_syll_per_line.keys())
+        val_og_syll_per_line = [cnt_og_syll_per_block[key] for key in key_og_syll_per_line]   
 
-    cnt_gen_syll_per_block = Counter(gen_syll_per_block)
-    key_gen_syll_per_block = sorted(cnt_gen_syll_per_block.keys())
-    val_gen_syll_per_block = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_block]
+        cnt_gen_syll_per_block = Counter(gen_syll_per_block)
+        key_gen_syll_per_block = sorted(cnt_gen_syll_per_block.keys())
+        val_gen_syll_per_block = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_block]
 
-    cnt_gen_syll_per_line = Counter(gen_syll_per_block)
-    key_gen_syll_per_line = sorted(cnt_gen_syll_per_line.keys())
-    val_gen_syll_per_line = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_line]
+        cnt_gen_syll_per_line = Counter(gen_syll_per_block)
+        key_gen_syll_per_line = sorted(cnt_gen_syll_per_line.keys())
+        val_gen_syll_per_line = [cnt_gen_syll_per_block[key] for key in key_gen_syll_per_line]
 
-    plt.figure('Syll per block')
-    plt.plot(key_og_syll_per_block, val_og_syll_per_block, 'k', label='Test songs')
-    plt.plot(key_gen_syll_per_block, val_gen_syll_per_block, 'b', label='Generated songs')
-    plt.show()
-    plt.savefig(args.deeper_checkpoint + 'test/sylls_per_block.fig')
+        plt.figure('Syll per block')
+        plt.plot(key_og_syll_per_block, val_og_syll_per_block, 'k', label='Test songs')
+        plt.plot(key_gen_syll_per_block, val_gen_syll_per_block, 'b', label='Generated songs')
+        plt.show()
+        plt.savefig(args.deeper_checkpoint + 'test/sylls_per_block.png')
 
-    plt.figure('Syll per line')
-    plt.plot(key_og_syll_per_line, val_og_syll_per_line, 'k', label='Test songs')
-    plt.plot(key_gen_syll_per_line, val_gen_syll_per_line, 'b', label='Generated songs')
-    plt.show()
-    plt.savefig(args.deeper_checkpoint + 'test/sylls_per_line.fig')
+        plt.figure('Syll per line')
+        plt.plot(key_og_syll_per_line, val_og_syll_per_line, 'k', label='Test songs')
+        plt.plot(key_gen_syll_per_line, val_gen_syll_per_line, 'b', label='Generated songs')
+        plt.show()
+        plt.savefig(args.deeper_checkpoint + 'test/sylls_per_line.png')
+        
+        with open(args.deeper_checkpoint + 'test/og_syll_per_block.json', 'w') as f:
+            f.write(json.dumps(cnt_og_syll_per_block))
+        
+        with open(args.deeper_checkpoint + 'test/og_syll_per_line.json', 'w') as f:
+            f.write(json.dumps(cnt_og_syll_per_line))
+
+        with open(args.deeper_checkpoint + 'test/gen_syll_per_block.json', 'w') as f:
+            f.write(json.dumps(cnt_gen_syll_per_block))
+
+        with open(args.deeper_checkpoint + 'test/gen_syll_per_line.json', 'w') as f:
+            f.write(json.dumps(cnt_gen_syll_per_line))
+
+    # Save note/rest boundary correlations dictionaries  
+
+    def boundary_dist_analysis(feature_boundary_cnt, dataset):
+        with open(args.deeper_checkpoint + 'test/%s.json'%(dataset + 'feature_boundary_cnt'), 'w') as f:
+            f.write(json.dumps(feature_boundary_cnt))
+
+        print('feature_boundary_cnt: ',feature_boundary_cnt)
+        N = len(feature_boundary_cnt)/8
+        rest_len_boundary_matrix = np.zeros((int(N), 4))
+
+        note_boundary_cnt = [0, 0, 0, 0]
+        rest_boundary_cnt = [0, 0, 0, 0]
+
+        items = list(feature_boundary_cnt.items())
+        print('items: ', len(items), items)
+
+        i = 0
+        j = 0
+        for item in items:
+            if item[0].startswith('note'):
+                if item[0].endswith('<BB>'):
+                    note_boundary_cnt[0] += item[1]
+                elif item[0].endswith('<BL>'):
+                    note_boundary_cnt[1] += item[1]
+                elif item[0].endswith('<None>'):
+                    note_boundary_cnt[2] += item[1]
+                elif item[0].endswith('<Word>'):
+                    note_boundary_cnt[3] += item[1]
+
+            elif item[0].startswith('rest'):
+                if item[0].endswith('<BB>'):
+                    rest_boundary_cnt[0] += item[1]
+                elif item[0].endswith('<BL>'):
+                    rest_boundary_cnt[1] += item[1]
+                elif item[0].endswith('<None>'):
+                    rest_boundary_cnt[2] += item[1]
+                elif item[0].endswith('<Word>'):
+                    rest_boundary_cnt[3] += item[1]
+                
+
+                if i > len(items)/2 and (i+1)%4 == 0:
+                    bar = [items[i-3][1], items[i-2][1], items[i-1][1], items[i][1]]
+                    if np.sum(bar) != 0:
+                        rest_len_boundary_matrix[j] = bar/np.sum(bar)
+                    else:
+                        rest_len_boundary_matrix[j] = bar
+                    j += 1
+            i += 1
+
+        rest_len_boundary_matrix = np.transpose(rest_len_boundary_matrix)
+        xnames = lengths
+        width = 0.35
+        ind = np.arange(N)
+        bbs = rest_len_boundary_matrix[0]
+        bls = rest_len_boundary_matrix[1]
+        nones = rest_len_boundary_matrix[2]
+        words = rest_len_boundary_matrix[3]
+        p1 = plt.bar(ind, bbs, width, color='b')
+        p2 = plt.bar(ind, bls, width, color='r', bottom=bbs)
+        p3 = plt.bar(ind, nones, width, color='g', bottom=list(map(lambda x,y: x+y, bbs,bls)))
+        p4 = plt.bar(ind, words, width, color='y', bottom=list(map(lambda x,y,z: x+y+z, bbs,bls,nones)))
+        plt.xticks(ind, xnames)
+        plt.yticks(np.arange(0, 1.011, 0.1))
+
+        blue_patch = mpatches.Patch(color='b', label='Block')
+        red_patch = mpatches.Patch(color='r', label='Line')
+        green_patch = mpatches.Patch(color='g', label='None')
+        yellow_patch = mpatches.Patch(color='y', label='Word')
+        plt.legend(handles=[blue_patch, red_patch, green_patch, yellow_patch])
+
+        plt.show()
+
+    syll_dist_analysis()
+    boundary_dist_analysis(og_feature_boundary_cnt, 'og')
+    boundary_dist_analysis(gen_feature_boundary_cnt, 'gen')
     
-    with open(args.deeper_checkpoint + 'test/og_syll_per_block.json', 'w') as f:
-        f.write(json.dumps(cnt_og_syll_per_block))
+
     
-    with open(args.deeper_checkpoint + 'test/og_syll_per_line.json', 'w') as f:
-        f.write(json.dumps(cnt_og_syll_per_line))
-
-    with open(args.deeper_checkpoint + 'test/gen_syll_per_block.json', 'w') as f:
-        f.write(json.dumps(cnt_gen_syll_per_block))
-
-    with open(args.deeper_checkpoint + 'test/gen_syll_per_line.json', 'w') as f:
-        f.write(json.dumps(cnt_gen_syll_per_line))
 
 
     """ Load model """
